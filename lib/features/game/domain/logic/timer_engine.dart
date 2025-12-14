@@ -28,7 +28,7 @@ class CountdownTimer {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _secondsRemaining--;
       onTick(_secondsRemaining);
-      
+
       if (_secondsRemaining <= 0) {
         timer.cancel();
         onFinish();
@@ -81,6 +81,9 @@ class RankedGameState {
   final int secondsRemaining;
   final bool timerActive;
   final DateTime? gameStartTime;
+  final Set<String> foundSolutions;
+  final int? currentResult;
+  final int cursorPosition;
 
   const RankedGameState({
     required this.target,
@@ -93,9 +96,12 @@ class RankedGameState {
     this.usedNumberIndices = const {},
     this.solutions = const [],
     this.lastScoreBreakdown,
-    this.secondsRemaining = 120,
+    this.secondsRemaining = 360,
     this.timerActive = false,
     this.gameStartTime,
+    this.foundSolutions = const {},
+    this.currentResult,
+    this.cursorPosition = 0,
   });
 
   RankedGameState copyWith({
@@ -112,6 +118,9 @@ class RankedGameState {
     int? secondsRemaining,
     bool? timerActive,
     DateTime? gameStartTime,
+    Set<String>? foundSolutions,
+    int? currentResult,
+    int? cursorPosition,
   }) {
     return RankedGameState(
       target: target ?? this.target,
@@ -127,6 +136,9 @@ class RankedGameState {
       secondsRemaining: secondsRemaining ?? this.secondsRemaining,
       timerActive: timerActive ?? this.timerActive,
       gameStartTime: gameStartTime ?? this.gameStartTime,
+      foundSolutions: foundSolutions ?? this.foundSolutions,
+      currentResult: currentResult ?? this.currentResult,
+      cursorPosition: cursorPosition ?? this.cursorPosition,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/logic/matador_engine.dart';
 import '../../domain/logic/timer_engine.dart';
+import '../../domain/repositories/rating_storage.dart';
 
 class RankedNotifier extends Notifier<RankedGameState> {
   late final MatadorEngine _engine;
@@ -16,7 +17,7 @@ class RankedNotifier extends Notifier<RankedGameState> {
       score: 0,
       isPlaying: false,
       message: '',
-      secondsRemaining: 120,
+      secondsRemaining: 360,
       timerActive: false,
     );
   }
@@ -25,12 +26,12 @@ class RankedNotifier extends Notifier<RankedGameState> {
     final level = _engine.generateLevel();
     final target = level['target'] as int;
     final numbers = level['numbers'] as List<int>;
-    
+
     final solutions = _engine.solve(numbers, target);
 
     _timer?.stop();
     _timer = CountdownTimer(
-      duration: const Duration(seconds: 120),
+      duration: const Duration(seconds: 360),
       onTick: (remaining) {
         state = state.copyWith(secondsRemaining: remaining);
       },
@@ -49,9 +50,10 @@ class RankedNotifier extends Notifier<RankedGameState> {
       isMatadorSolution: false,
       usedNumberIndices: {},
       solutions: solutions,
-      secondsRemaining: 120,
+      secondsRemaining: 360,
       timerActive: false,
       gameStartTime: DateTime.now(),
+      foundSolutions: {},
     );
 
     _timer!.start();
@@ -62,62 +64,153 @@ class RankedNotifier extends Notifier<RankedGameState> {
     final isNumber = int.tryParse(value) != null;
     final isOperator = ['+', '-', '*', '/'].contains(value);
     
+    // Insérer à la position du curseur
+    final cursorPos = state.cursorPosition.clamp(0, state.expression.length);
+    final before = state.expression.substring(0, cursorPos);
+    final after = state.expression.substring(cursorPos);
+
     if (state.expression.isEmpty) {
       if (isOperator && value != '-') return;
-      if (isNumber) {
-        final idx = int.parse(value);
-        final newUsedIndices = {...state.usedNumberIndices};
-        if (state.availableNumbers.contains(idx)) {
-          newUsedIndices.add(state.availableNumbers.indexOf(idx));
-        }
-        state = state.copyWith(
-          expression: value,
-          message: '',
-          usedNumberIndices: newUsedIndices,
-        );
-      } else {
-        state = state.copyWith(expression: value, message: '');
-      }
+      final newExpression = value;
+      final newUsedIndices = _calculateUsedIndices(newExpression);
+      final result = _engine.evaluate(newExpression);
+      
+      state = state.copyWith(
+        expression: newExpression,
+        message: '',
+        usedNumberIndices: newUsedIndices,
+        currentResult: result,
+        cursorPosition: newExpression.length,
+      );
       return;
     }
 
-    final lastChar = state.expression.isEmpty ? '' : state.expression[state.expression.length - 1];
-    final lastIsNumber = int.tryParse(lastChar) != null;
-    final lastIsOperator = ['+', '-', '*', '/'].contains(lastChar);
-    final lastIsOpenParen = lastChar == '(';
+    // Vérifier le caractère avant le curseur
+    final charBefore = cursorPos > 0 ? state.expression[cursorPos - 1] : '';
+    final charAfter = cursorPos < state.expression.length ? state.expression[cursorPos] : '';
+    final beforeIsNumber = int.tryParse(charBefore) != null;
+    final beforeIsOperator = ['+', '-', '*', '/'].contains(charBefore);
+    final beforeIsOpenParen = charBefore == '(';
+    final afterIsNumber = int.tryParse(charAfter) != null;
 
-    if (isNumber && (lastIsNumber || lastChar == ')')) {
+    // Règles de validation
+    if (isNumber && (beforeIsNumber || charBefore == ')' || afterIsNumber)) {
       return;
     }
 
-    if (isOperator && lastIsOperator) {
+    if (isOperator && beforeIsOperator) {
       return;
     }
 
-    if (lastIsOpenParen && isOperator && value != '-') {
+    if (beforeIsOpenParen && isOperator && value != '-') {
       return;
     }
 
-    final newExpression = state.expression + value;
+    final newExpression = before + value + after;
+    final newUsedIndices = _calculateUsedIndices(newExpression);
+
+    // Calculer le résultat de la nouvelle expression
+    final result = _engine.evaluate(newExpression);
     
-    Set<int> newUsedIndices = state.usedNumberIndices;
-    if (isNumber) {
-      final idx = int.parse(value);
-      if (state.availableNumbers.contains(idx)) {
-        newUsedIndices = {...state.usedNumberIndices};
-        newUsedIndices.add(state.availableNumbers.indexOf(idx));
-      }
-    }
-
     state = state.copyWith(
       expression: newExpression,
       message: '',
       usedNumberIndices: newUsedIndices,
+      currentResult: result,
+      cursorPosition: cursorPos + value.length,
     );
+
+    // Validation automatique à chaque modification
+    _checkAutoValidation();
+  }
+
+  /// Calcule les indices des nombres utilisés dans l'expression
+  Set<int> _calculateUsedIndices(String expression) {
+    final usedIndices = <int>{};
+    String currentNumber = '';
+    
+    for (int i = 0; i < expression.length; i++) {
+      final char = expression[i];
+      if (int.tryParse(char) != null) {
+        currentNumber += char;
+      } else {
+        if (currentNumber.isNotEmpty) {
+          final num = int.parse(currentNumber);
+          // Chercher ce nombre dans availableNumbers et marquer son indice comme utilisé
+          for (int j = 0; j < state.availableNumbers.length; j++) {
+            if (state.availableNumbers[j] == num && !usedIndices.contains(j)) {
+              usedIndices.add(j);
+              break;
+            }
+          }
+          currentNumber = '';
+        }
+      }
+    }
+    
+    // Traiter le dernier nombre s'il existe
+    if (currentNumber.isNotEmpty) {
+      final num = int.parse(currentNumber);
+      for (int j = 0; j < state.availableNumbers.length; j++) {
+        if (state.availableNumbers[j] == num && !usedIndices.contains(j)) {
+          usedIndices.add(j);
+          break;
+        }
+      }
+    }
+
+    return usedIndices;
   }
 
   void clearExpression() {
-    state = state.copyWith(expression: '', message: '', usedNumberIndices: {});
+    state = state.copyWith(
+      expression: '',
+      message: '',
+      usedNumberIndices: {},
+      currentResult: null,
+      cursorPosition: 0,
+    );
+  }
+
+  void setCursorPosition(int position) {
+    state = state.copyWith(
+      cursorPosition: position.clamp(0, state.expression.length),
+    );
+  }
+
+  void deleteLastCharacter() {
+    if (state.expression.isEmpty || state.cursorPosition <= 0) return;
+
+    final cursorPos = state.cursorPosition.clamp(0, state.expression.length);
+    final before = state.expression.substring(0, cursorPos - 1);
+    final after = state.expression.substring(cursorPos);
+    final newExpression = before + after;
+    
+    final newUsedIndices = _calculateUsedIndices(newExpression);
+    final result = newExpression.isEmpty ? null : _engine.evaluate(newExpression);
+    
+    state = state.copyWith(
+      expression: newExpression,
+      message: '',
+      usedNumberIndices: newUsedIndices,
+      currentResult: result,
+      cursorPosition: cursorPos - 1,
+    );
+  }
+
+  /// Validation automatique - évalue l'expression à chaque modification
+  void _checkAutoValidation() {
+    if (state.expression.isEmpty) return;
+
+    final result = _engine.evaluate(state.expression);
+
+    // Si l'expression est invalide, ne rien faire
+    if (result == null) return;
+
+    // Si le résultat correspond à la cible, valider automatiquement
+    if (result == state.target) {
+      _validateSolution();
+    }
   }
 
   void submitAnswer() {
@@ -134,23 +227,7 @@ class RankedNotifier extends Notifier<RankedGameState> {
     }
 
     if (result == state.target) {
-      final (points, breakdown) = _calculateScore(state.expression);
-      final isMathador = _isMathador(state.expression);
-      final finalPoints = isMathador ? 13 : points;
-      final newScore = state.score + finalPoints;
-      
-      final message = isMathador
-          ? '🏆 MATHADOR! 13 Points!'
-          : '✅ Correct! +$points Points';
-
-      state = state.copyWith(
-        score: newScore,
-        message: message,
-        isMatadorSolution: isMathador,
-        lastScoreBreakdown: breakdown,
-      );
-
-      Future.delayed(const Duration(seconds: 2), startGame);
+      _validateSolution();
     } else {
       state = state.copyWith(
         message: '❌ Wrong! Target: ${state.target}, Got: $result',
@@ -158,21 +235,76 @@ class RankedNotifier extends Notifier<RankedGameState> {
     }
   }
 
-  void endGame() {
+  /// Valide une solution correcte (appelée automatiquement ou manuellement)
+  void _validateSolution() {
+    if (state.expression.isEmpty) return;
+
+    // Normaliser l'expression (enlever espaces)
+    final normalizedExpr = state.expression.replaceAll(' ', '');
+
+    // Vérifier si cette solution a déjà été trouvée
+    if (state.foundSolutions.contains(normalizedExpr)) {
+      state = state.copyWith(
+        expression: '',
+        message: '✓ (déjà trouvée)',
+        usedNumberIndices: {},
+        cursorPosition: 0,
+        currentResult: null,
+      );
+      return;
+    }
+
+    final (points, breakdown) = _calculateScore(state.expression);
+    final isMathador = _isMathador(state.expression);
+    final finalPoints = isMathador ? 13 : points;
+    final newScore = state.score + finalPoints;
+
+    final solutionCount = state.foundSolutions.length + 1;
+    final message = isMathador
+        ? '🏆 MATHADOR! +13 pts (Solution $solutionCount)'
+        : '✅ +$points pts (Solution $solutionCount)';
+
+    // Ajouter la solution aux solutions trouvées
+    final updatedFoundSolutions = {...state.foundSolutions, normalizedExpr};
+
+    // NE PAS générer nouvelle question - garder la même cible
+    state = state.copyWith(
+      score: newScore,
+      expression: '',
+      message: message,
+      isMatadorSolution: isMathador,
+      lastScoreBreakdown: breakdown,
+      usedNumberIndices: {},
+      foundSolutions: updatedFoundSolutions,
+      cursorPosition: 0,
+      currentResult: null,
+    );
+  }
+
+  Future<void> endGame() async {
     _timer?.stop();
+
+    // Mettre à jour le rating Elo avec le nouveau système
+    final ratingStorage = ref.read(ratingStorageProvider);
+    await ratingStorage.updateRatingAfterGame(
+      playerScore: state.score,
+      foundMathador: state.isMatadorSolution,
+    );
+
+    // Rafraîchir le profil de rating
+    ref.invalidate(playerRatingProvider);
+
     state = state.copyWith(
       isPlaying: false,
       timerActive: false,
       message: 'Time\'s Up! Game Over',
     );
-
-    // Save score would be handled in the UI layer via ScoreStorage
   }
 
   (int, String) _calculateScore(String expression) {
     int points = 0;
     final breakdown = StringBuffer();
-    
+
     final operators = {
       '+': 1,
       '-': 2,
@@ -212,10 +344,10 @@ class RankedNotifier extends Notifier<RankedGameState> {
 
   bool _isMathador(String expression) {
     final usesAllNumbers = _countNumbersInExpression(expression) == 5;
-    
+
     final operators = {'+', '-', '*', '/'};
     final usedOps = <String>{};
-    
+
     for (final op in operators) {
       if (expression.contains(op)) {
         usedOps.add(op);

@@ -98,7 +98,8 @@ class TrainingNotifier extends Notifier<TrainingState> {
 
   @override
   TrainingState build() {
-    _loadHistory();
+    // Load history asynchronously without blocking initialization
+    Future.microtask(() => _loadHistory());
     return TrainingState();
   }
 
