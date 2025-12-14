@@ -5,7 +5,7 @@ class MatadorEngine {
   final Random _random = Random();
   static const int maxRetries = 10;
   static const int minNumberRange = 1;
-  static const int maxNumberRange = 20;
+  static const int maxNumberRange = 12;
   static const int numNumbers = 5;
 
   /// Generates a complete level with guaranteed Matador and Easy solutions
@@ -48,11 +48,11 @@ class MatadorEngine {
     };
   }
 
-  /// Generates 5 UNIQUE random numbers (1-20)
+  /// Generates 5 UNIQUE random numbers (1 to 12, all positive)
   List<int> _generateNumbers() {
     final numbers = <int>[];
     while (numbers.length < numNumbers) {
-      final num = _random.nextInt(maxNumberRange - minNumberRange + 1) + minNumberRange;
+      int num = _random.nextInt(maxNumberRange - minNumberRange + 1) + minNumberRange;
       if (!numbers.contains(num)) {
         numbers.add(num);
       }
@@ -60,37 +60,35 @@ class MatadorEngine {
     return numbers;
   }
 
-  /// Generates a target number by using ALL 5 numbers
-  /// This guarantees a Matador solution exists
+  /// Generates a target number by using ALL 5 numbers (Mathador guaranteed)
+  /// This guarantees a Mathador solution exists
   int? _generateTargetWithAllNumbers(List<int> numbers) {
     try {
       // Try a simple expression: a + b + c + d + e
       final simpleSum = numbers.reduce((a, b) => a + b);
-      if (simpleSum >= 20 && simpleSum <= 100) {
+      if (simpleSum >= -50 && simpleSum <= 50) {
         return simpleSum;
       }
 
       // Try another combination: a * b + c + d - e
-      if (numbers[0] * numbers[1] + numbers[2] + numbers[3] - numbers[4] >= 20) {
-        final result = numbers[0] * numbers[1] + numbers[2] + numbers[3] - numbers[4];
-        if (result >= 20 && result <= 100) {
-          return result;
-        }
+      final result1 = numbers[0] * numbers[1] + numbers[2] + numbers[3] - numbers[4];
+      if (result1 >= -50 && result1 <= 50) {
+        return result1;
       }
 
       // Try: (a + b) * (c + d) / e (if divisible)
       final sum1 = numbers[0] + numbers[1];
       final sum2 = numbers[2] + numbers[3];
-      if ((sum1 * sum2) % numbers[4] == 0) {
+      if (sum2 != 0 && (sum1 * sum2) % sum2 == 0) {
         final result = (sum1 * sum2) ~/ numbers[4];
-        if (result >= 20 && result <= 100) {
+        if (result != 0 && result >= -50 && result <= 50) {
           return result;
         }
       }
 
-      // Random combination
+      // Random combination allowing negative intermediates
       final ops = ['+', '-', '*', '/'];
-      for (int i = 0; i < 5; i++) {
+      for (int i = 0; i < 10; i++) {
         try {
           final op1 = ops[_random.nextInt(4)];
           final op2 = ops[_random.nextInt(4)];
@@ -101,7 +99,7 @@ class MatadorEngine {
               '${numbers[0]}$op1${numbers[1]}$op2${numbers[2]}$op3${numbers[3]}$op4${numbers[4]}';
           final result = evaluate(expr);
 
-          if (result != null && result >= 20 && result <= 100) {
+          if (result != null && result != 0 && result >= -50 && result <= 50) {
             return result;
           }
         } catch (e) {
@@ -311,7 +309,7 @@ class MatadorEngine {
     try {
       if (expression.isEmpty) return null;
 
-      final parser = Parser();
+      final parser = ShuntingYardParser();
       final exp = parser.parse(expression);
       final result = exp.evaluate(EvaluationType.REAL, ContextModel());
 
@@ -351,7 +349,7 @@ class MatadorEngine {
     return solutionList;
   }
 
-  /// Finds all solutions for a given permutation
+  /// Finds all solutions for a given permutation with proper parentheses
   List<String> _findAllSolutions(List<int> numbers, int target, {int depth = 0}) {
     final solutions = <String>{};
     if (depth > 8) return solutions.toList();
@@ -363,7 +361,7 @@ class MatadorEngine {
       return solutions.toList();
     }
 
-    // Try all operator combinations for this permutation
+    // Try all operator combinations for this permutation (with parentheses for clarity)
     final ops = _generateOperatorCombinations(['+', '-', '*', '/'], numbers.length - 1);
     for (final opList in ops) {
       final expr = _buildExpression(numbers, opList);
@@ -372,7 +370,7 @@ class MatadorEngine {
       }
     }
 
-    // Try recursive combinations (combine two numbers, then recurse)
+    // Try recursive combinations with parentheses for grouping
     for (int i = 0; i < numbers.length; i++) {
       for (int j = i + 1; j < numbers.length; j++) {
         final num1 = numbers[i];
@@ -409,7 +407,11 @@ class MatadorEngine {
               newNumbers.add(combined);
 
               final recursiveSolutions = _findAllSolutions(newNumbers, target, depth: depth + 1);
-              solutions.addAll(recursiveSolutions);
+              // Add parentheses to recursive solutions for clarity
+              for (final sol in recursiveSolutions) {
+                final withParens = '($num1 $op $num2) ... $sol';
+                solutions.add(withParens);
+              }
             }
           } catch (e) {
             continue;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/game_provider.dart';
 
 class GameHomePage extends ConsumerWidget {
@@ -7,301 +8,421 @@ class GameHomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final gameState = ref.watch(gameProvider);
+    try {
+      final gameState = ref.watch(gameProvider);
 
-    if (!gameState.isPlaying) {
-      return _buildStartScreen(context, ref);
+      if (!gameState.isPlaying) {
+        return _buildStartScreen(context, ref);
+      }
+
+      return _buildGameScreen(context, ref, gameState);
+    } catch (e) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A0A0A),
+        body: Center(
+          child: Text(
+            'Error: $e',
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      );
     }
-
-    return _buildGameScreen(context, ref, gameState);
   }
 
-  /// Start Game Screen
+  /// Crypto Wallet Start Screen
   Widget _buildStartScreen(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('MathArena'),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'MATADOR',
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                    color: const Color(0xFF00D9FF),
+      backgroundColor: const Color(0xFF0A0A0A),
+      body: Container(
+        color: const Color(0xFF0A0A0A),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Title
+                Text(
+                  'MATHARENA',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 56,
                     fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Combine numbers to reach the target',
-              style: Theme.of(context).textTheme.bodyLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 48),
-            ElevatedButton(
-              onPressed: () {
-                ref.read(gameProvider.notifier).startGame();
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 48,
-                  vertical: 24,
+                    color: Colors.white,
+                    letterSpacing: 3,
+                  ),
                 ),
-                backgroundColor: const Color(0xFF00D9FF),
-              ),
-              child: Text(
-                'START GAME',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
+                const SizedBox(height: 24),
+                Container(
+                  height: 1,
+                  width: 80,
+                  color: Colors.grey[800],
                 ),
-              ),
+                const SizedBox(height: 48),
+                // Subtitle
+                Text(
+                  'Master the numbers.\nSecure the solution.',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: Colors.grey[500],
+                    height: 1.8,
+                    letterSpacing: 0.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 80),
+                // Simple Button
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      ref.read(gameProvider.notifier).startGame();
+                    },
+                    child: Container(
+                      width: 240,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 48,
+                        vertical: 18,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Colors.white,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'BEGIN',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  /// Active Game Screen
+  /// Crypto Wallet Game Screen
   Widget _buildGameScreen(
     BuildContext context,
     WidgetRef ref,
     dynamic gameState,
   ) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('MathArena - Game'),
-        centerTitle: true,
-        actions: [
-          // Solutions Button
-          IconButton(
-            icon: const Icon(Icons.lightbulb_outline),
-            onPressed: () {
-              _showSolutions(context, gameState.solutions);
-            },
-            tooltip: 'Show Solutions',
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Center(
-              child: Text(
-                'Score: ${gameState.score}',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: const Color(0xFFFF006E),
-                      fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            // Matador Bonus Badge
-            if (gameState.isMatadorSolution)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.amber,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.amber.withOpacity(0.5),
-                      blurRadius: 8,
+      body: Container(
+        color: const Color(0xFF0A0A0A),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Header: Title + Score (Minimalist)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'MATHARENA',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    Text(
+                      '${gameState.score}',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1,
+                      ),
                     ),
                   ],
                 ),
-                child: Text(
-                  '🏆 MATADOR BONUS! 🏆',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                  ),
-                ),
               ),
-            if (gameState.isMatadorSolution) const SizedBox(height: 16),
-            // Target Number (Big)
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                border: Border.all(color: const Color(0xFF00D9FF), width: 2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'TARGET',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '${gameState.target}',
-                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                          color: const Color(0xFF00D9FF),
-                          fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Current Expression (Medium)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                border:
-                    Border.all(color: const Color(0xFFFF006E), width: 1.5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                gameState.expression.isEmpty
-                    ? 'Enter expression'
-                    : gameState.expression,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: gameState.expression.isEmpty
-                          ? Colors.grey
-                          : Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Message Feedback
-            if (gameState.message.isNotEmpty)
+              // Divider
               Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: gameState.message.contains('Correct')
-                      ? Colors.green.withOpacity(0.2)
-                      : gameState.message.contains('Wrong')
-                          ? Colors.red.withOpacity(0.2)
-                          : Colors.yellow.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  gameState.message,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: gameState.message.contains('Correct')
-                            ? Colors.green
-                            : gameState.message.contains('Wrong')
-                                ? Colors.red
-                                : Colors.yellow,
+                height: 1,
+                color: Colors.grey[900],
+              ),
+              // Main Content Area
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                  child: Column(
+                    children: [
+                      // Target Display (Simple Box)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 40,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Colors.grey[800]!,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'TARGET',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              '${gameState.target}',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 64,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      // Current Expression
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Colors.grey[800]!,
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          color: Colors.grey[950],
+                        ),
+                        child: Text(
+                          gameState.expression.isEmpty
+                              ? '0'
+                              : gameState.expression,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 18,
+                            color: gameState.expression.isEmpty
+                                ? Colors.grey[700]
+                                : Colors.white,
+                            letterSpacing: 1,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Message Feedback
+                      if (gameState.message.isNotEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: Colors.grey[800]!,
+                              width: 1,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.grey[950],
+                          ),
+                          child: Text(
+                            gameState.message,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: Colors.grey[300],
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                    ],
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ),
-            const SizedBox(height: 24),
+              // Input Area (Bottom)
+              _buildInputPanel(context, ref, gameState),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            // Available Numbers Grid
-            Text(
-              'Available Numbers',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey,
+  /// Input Panel with Button Grid (Minimalist)
+  Widget _buildInputPanel(
+    BuildContext context,
+    WidgetRef ref,
+    dynamic gameState,
+  ) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final buttonHeight = screenWidth < 600 ? 48.0 : 56.0;
+    final buttonWidth = screenWidth < 600 ? 48.0 : 56.0;
+    
+    // Sort numbers in ascending order
+    final sortedNumbers = List<int>.from(gameState.availableNumbers)..sort();
+    
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: Colors.grey[900]!,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Column(
+          spacing: 12,
+          children: [
+            // Row 1: Numbers
+            SizedBox(
+              height: buttonHeight,
+              child: Center(
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: sortedNumbers.length,
+                  shrinkWrap: true,
+                  itemBuilder: (context, index) {
+                    final num = sortedNumbers[index];
+                    // Find the original index in availableNumbers for tracking usage
+                    final originalIndex = gameState.availableNumbers.indexOf(num);
+                    final isUsed = gameState.usedNumberIndices.contains(originalIndex);
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: SizedBox(
+                        width: buttonWidth,
+                        child: _buildMinimalButton(
+                          label: num.toString(),
+                          isDisabled: isUsed,
+                          onPressed: isUsed
+                              ? null
+                              : () => ref.read(gameProvider.notifier).addToExpression(num.toString()),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: gameState.availableNumbers.asMap().entries.map<Widget>((entry) {
-                final index = entry.key;
-                final num = entry.value;
-                final isUsed = gameState.usedNumberIndices.contains(index);
-                return _buildNumberButton(
-                  context,
-                  ref,
-                  num.toString(),
-                  isUsed: isUsed,
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            // Operators
-            Text(
-              'Operators',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: ['+', '-', '*', '/'].map((op) {
-                return _buildOperatorButton(context, ref, op);
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            // Parentheses
-            Text(
-              'Parentheses',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: ['(', ')'].map((paren) {
-                return _buildParenthesesButton(context, ref, paren);
-              }).toList(),
-            ),
-            const SizedBox(height: 32),
-
-            // Clear and Submit Buttons
+            // Row 2: Operators
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      ref.read(gameProvider.notifier).clearExpression();
-                    },
-                    icon: const Icon(Icons.clear),
-                    label: const Text('CLEAR'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Colors.grey[700],
-                    ),
-                  ),
+                  child: _buildOperatorButton('+', () =>
+                      ref.read(gameProvider.notifier).addToExpression('+')),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      final notifier = ref.read(gameProvider.notifier);
-                      notifier.submitAnswer();
-                      
-                      // Show feedback dialog after a short delay
-                      Future.delayed(const Duration(milliseconds: 100), () {
-                        if (gameState.message.contains('MATHADOR')) {
-                          _showMathadorDialog(context);
-                        } else if (gameState.message.contains('Correct')) {
-                          _showCorrectDialog(context, gameState);
-                        }
-                      });
-                    },
-                    icon: const Icon(Icons.check),
-                    label: const Text('SUBMIT'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: const Color(0xFF00D9FF),
-                    ),
-                  ),
+                  child: _buildOperatorButton('-', () =>
+                      ref.read(gameProvider.notifier).addToExpression('-')),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildOperatorButton('×', () =>
+                      ref.read(gameProvider.notifier).addToExpression('*')),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildOperatorButton('÷', () =>
+                      ref.read(gameProvider.notifier).addToExpression('/')),
                 ),
               ],
+            ),
+            // Row 3: Parentheses + Actions
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMinimalButton(
+                    label: '(',
+                    onPressed: () =>
+                        ref.read(gameProvider.notifier).addToExpression('('),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildMinimalButton(
+                    label: ')',
+                    onPressed: () =>
+                        ref.read(gameProvider.notifier).addToExpression(')'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildActionButton(
+                    'C',
+                    () => ref.read(gameProvider.notifier).clearExpression(),
+                    isClear: true,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildActionButton('✓', () {
+                    final notifier = ref.read(gameProvider.notifier);
+                    final currentContext = context;
+                    final currentGameState = gameState;
+                    notifier.submitAnswer();
+
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      if (currentContext.mounted) {
+                        if (currentGameState.message.contains('MATHADOR')) {
+                          _showMathadorDialog(currentContext);
+                        } else if (currentGameState.message.contains('Correct')) {
+                          _showCorrectDialog(currentContext, currentGameState);
+                        }
+                      }
+                    });
+                  }),
+                ),
+              ],
+            ),
+            // Solutions Button
+            SizedBox(
+              height: 44,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _showSolutions(context, gameState.solutions),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Colors.grey[800]!,
+                        width: 1,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'SOLUTIONS',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.grey[500],
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -309,144 +430,255 @@ class GameHomePage extends ConsumerWidget {
     );
   }
 
-  /// Number Button Widget
-  Widget _buildNumberButton(
-    BuildContext context,
-    WidgetRef ref,
-    String number, {
-    bool isUsed = false,
+  /// Minimal Button for Numbers
+  Widget _buildMinimalButton({
+    required String label,
+    required VoidCallback? onPressed,
+    bool isDisabled = false,
   }) {
-    return ElevatedButton(
-      onPressed: isUsed
-          ? null
-          : () {
-              ref.read(gameProvider.notifier).addToExpression(number);
-            },
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.all(12),
-        backgroundColor: isUsed ? Colors.grey[600] : const Color(0xFF00D9FF),
-        disabledBackgroundColor: Colors.grey[600],
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      child: Text(
-        number,
-        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: isUsed ? Colors.grey[400] : Colors.black,
-              fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  /// Operator Button Widget
-  Widget _buildOperatorButton(
-    BuildContext context,
-    WidgetRef ref,
-    String operator,
-  ) {
-    return ElevatedButton(
-      onPressed: () {
-        ref.read(gameProvider.notifier).addToExpression(operator);
-      },
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.all(12),
-        backgroundColor: const Color(0xFFFF006E),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      child: Text(
-        operator,
-        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isDisabled ? null : onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isDisabled ? Colors.grey[900]! : Colors.grey[800]!,
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(8),
+            color: isDisabled ? Colors.grey[950] : Colors.transparent,
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: isDisabled ? Colors.grey[700] : Colors.white,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  /// Parentheses Button Widget
-  Widget _buildParenthesesButton(
-    BuildContext context,
-    WidgetRef ref,
-    String parenthesis,
-  ) {
-    return ElevatedButton(
-      onPressed: () {
-        ref.read(gameProvider.notifier).addToExpression(parenthesis);
-      },
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.all(12),
-        backgroundColor: Colors.grey[600],
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      child: Text(
-        parenthesis,
-        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+  /// Operator Button
+  Widget _buildOperatorButton(String label, VoidCallback onPressed) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Colors.grey[700]!,
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.grey[900],
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  /// Shows the Mathador bonus dialog
+  /// Action Button (C, ✓)
+  Widget _buildActionButton(String label, VoidCallback onPressed, {bool isClear = false}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isClear ? Colors.red[700]! : Colors.grey[700]!,
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(8),
+            color: isClear ? Colors.red[950] : Colors.grey[850],
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: isClear ? Colors.red[300] : Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Mathador Victory Dialog (Minimalist)
   void _showMathadorDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          '🏆 MATHADOR! 🏆',
-          style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold),
+        backgroundColor: const Color(0xFF0A0A0A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(
+            color: Colors.white,
+            width: 2,
+          ),
+        ),
+        title: Text(
+          'MATHADOR',
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: 2,
+          ),
           textAlign: TextAlign.center,
         ),
-        content: const Text(
-          'You used all 5 numbers and all 4 operators!\n\n+13 POINTS',
-          style: TextStyle(color: Colors.white),
-          textAlign: TextAlign.center,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'All 5 numbers + all 4 operators',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: Colors.grey[400],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 14,
+              ),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.white,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '+13 POINTS',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Continue', style: TextStyle(color: Color(0xFF00D9FF))),
+            child: Text(
+              'CONTINUE',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 1,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Shows the correct answer dialog with score breakdown
+  /// Correct Answer Dialog (Minimalist)
   void _showCorrectDialog(BuildContext context, dynamic gameState) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          '✅ Correct!',
-          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+        backgroundColor: const Color(0xFF0A0A0A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(
+            color: Colors.white,
+            width: 2,
+          ),
+        ),
+        title: Text(
+          'CORRECT',
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: 2,
+          ),
+          textAlign: TextAlign.center,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Points: +${_extractPoints(gameState.message)}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.white,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '+${_extractPoints(gameState.message)} POINTS',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 1,
+                ),
+                textAlign: TextAlign.center,
               ),
             ),
             if (gameState.lastScoreBreakdown != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(
-                'Breakdown:\n${gameState.lastScoreBreakdown}',
-                style: const TextStyle(color: Colors.grey, fontSize: 14),
+                'Breakdown:',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.grey[800]!,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.grey[950],
+                ),
+                child: Text(
+                  gameState.lastScoreBreakdown,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 10,
+                    color: Colors.grey[400],
+                  ),
+                ),
               ),
             ],
           ],
@@ -454,70 +686,106 @@ class GameHomePage extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Next Round', style: TextStyle(color: Color(0xFF00D9FF))),
+            child: Text(
+              'NEXT',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 1,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Shows all available solutions in a bottom sheet
+  /// Solutions Bottom Sheet (Minimalist)
   void _showSolutions(BuildContext context, List<String> solutions) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Available Solutions',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: const Color(0xFF00D9FF),
-              ),
+      backgroundColor: const Color(0xFF0A0A0A),
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: Colors.grey[800]!,
+              width: 2,
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: solutions.length,
-                itemBuilder: (context, index) {
-                  final solution = solutions[index];
-                  final isMathador = _containsAllOperators(solution);
-                  
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isMathador ? Colors.amber.withOpacity(0.2) : const Color(0xFF2E2E2E),
-                      border: Border.all(
-                        color: isMathador ? Colors.amber : Colors.grey,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            solution,
-                            style: TextStyle(
-                              color: isMathador ? Colors.amber : Colors.white,
-                              fontFamily: 'monospace',
-                            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'SOLUTIONS',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: solutions.length,
+                  itemBuilder: (context, index) {
+                    final solution = solutions[index];
+                    final isMathador = _containsAllOperators(solution);
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: isMathador
+                                ? Colors.white
+                                : Colors.grey[800]!,
+                            width: isMathador ? 2 : 1,
                           ),
+                          borderRadius: BorderRadius.circular(8),
+                          color: isMathador ? Colors.grey[900] : Colors.transparent,
                         ),
-                        if (isMathador)
-                          const Text(
-                            '🏆 Mathador',
-                            style: TextStyle(color: Colors.amber, fontSize: 12),
-                          ),
-                      ],
-                    ),
-                  );
-                },
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                solution,
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 12,
+                                  color: isMathador
+                                      ? Colors.white
+                                      : Colors.grey[500],
+                                  fontWeight: isMathador
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                                maxLines: 3,
+                                overflow: TextOverflow.visible,
+                              ),
+                            ),
+                            if (isMathador)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 8),
+                                child: Text(
+                                  '★',
+                                  style: TextStyle(fontSize: 14, color: Colors.white),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

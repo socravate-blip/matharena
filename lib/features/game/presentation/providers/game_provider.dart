@@ -101,8 +101,8 @@ class GameNotifier extends Notifier<GameState> {
     final isOperator = ['+', '-', '*', '/'].contains(value);
     
     if (state.expression.isEmpty) {
-      // First token must be a number or opening parenthesis
-      if (isOperator) return;
+      // First token can be: number, '(', or '-' (for negative numbers)
+      if (isOperator && value != '-') return; // Allow minus at start
       if (isNumber) {
         // Mark this number as used
         final idx = int.parse(value);
@@ -132,13 +132,13 @@ class GameNotifier extends Notifier<GameState> {
       return; // Ignore - user must use an operator
     }
 
-    // Can't have consecutive operators
+    // Can't have consecutive operators (except '-' after '(' which is a sign)
     if (isOperator && lastIsOperator) {
       return;
     }
 
-    // Must have operand after opening paren
-    if (lastIsOpenParen && isOperator) {
+    // Must have operand after opening paren (except '-' for negative numbers)
+    if (lastIsOpenParen && isOperator && value != '-') {
       return;
     }
 
