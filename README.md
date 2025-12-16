@@ -1,6 +1,55 @@
 # MathArena Project
 
-MathArena is a Flutter application designed to provide an engaging platform for math-related games and activities. This project follows Clean Architecture principles to ensure a scalable and maintainable codebase.
+MathArena is a Flutter application designed to provide an engaging platform for competitive math games. This project follows Clean Architecture principles to ensure a scalable and maintainable codebase.
+
+## 🎮 Features
+
+- **Solo Training Mode**: Practice mental math with customizable difficulty
+- **Ranked Mode**: Compete for ELO rating
+- **Multiplayer (Online/Offline)**: Play against AI bots or real players
+- **ELO Rating System**: Track your progress
+- **Multiple Game Modes**:
+  - Basic arithmetic puzzles
+  - Complex calculations
+  - Game24 challenges
+  - Matador (use all numbers)
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Flutter SDK installed
+- Chrome browser (for web development)
+
+### Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd MathArena
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   flutter pub get
+   ```
+
+3. **Run the application**:
+   ```bash
+   flutter run -d chrome --web-port 8080
+   ```
+
+## 🎯 Multiplayer Setup (5 minutes)
+
+The multiplayer mode works in **offline mode by default** (against AI bots). To enable online multiplayer:
+
+📖 **Follow the guide**: [QUICK_SETUP_MULTIPLAYER.md](QUICK_SETUP_MULTIPLAYER.md)
+
+Quick steps:
+1. Enable Anonymous Authentication in Firebase Console
+2. Configure Security Rules
+3. Done! Multiplayer works automatically
+
+**Troubleshooting**: See [MULTIPLAYER_DEBUG.md](MULTIPLAYER_DEBUG.md)
 
 ## Project Structure
 

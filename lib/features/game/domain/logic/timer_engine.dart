@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../models/puzzle.dart';
 
 class CountdownTimer {
   Timer? _timer;
@@ -66,8 +67,25 @@ class CountdownTimer {
   }
 }
 
-/// Ranked game state including timer
+/// Ranked game state including timer and match progression
 class RankedGameState {
+  // Match-level state
+  final List<GamePuzzle> matchQueue;
+  final int currentPuzzleIndex;
+  final int totalScore;
+  final DateTime? matchStartTime;
+
+  // Bot opponent state
+  final bool playingAgainstBot;
+  final String? botName;
+  final int? botElo;
+  final int botScore;
+  final int botCurrentPuzzleIndex;
+  final double botPuzzleProgress; // 0.0 to 1.0 for current puzzle
+  final DateTime? botPuzzleStartTime;
+  final bool showEndDialog; // Flag to show end dialog once
+
+  // Current puzzle state
   final int target;
   final List<int> availableNumbers;
   final String expression;
@@ -86,6 +104,23 @@ class RankedGameState {
   final int cursorPosition;
 
   const RankedGameState({
+    // Match-level defaults
+    this.matchQueue = const [],
+    this.currentPuzzleIndex = 0,
+    this.totalScore = 0,
+    this.matchStartTime,
+
+    // Bot opponent defaults
+    this.playingAgainstBot = true,
+    this.botName,
+    this.botElo,
+    this.botScore = 0,
+    this.botCurrentPuzzleIndex = 0,
+    this.botPuzzleProgress = 0.0,
+    this.botPuzzleStartTime,
+    this.showEndDialog = false,
+
+    // Current puzzle defaults
     required this.target,
     required this.availableNumbers,
     required this.expression,
@@ -104,7 +139,36 @@ class RankedGameState {
     this.cursorPosition = 0,
   });
 
+  // Convenience getters
+  GamePuzzle? get currentPuzzle => currentPuzzleIndex < matchQueue.length
+      ? matchQueue[currentPuzzleIndex]
+      : null;
+
+  bool get isMatchComplete => currentPuzzleIndex >= matchQueue.length;
+
+  int get totalPuzzles => matchQueue.length;
+
+  double get matchProgress =>
+      totalPuzzles > 0 ? (currentPuzzleIndex / totalPuzzles) : 0.0;
+
   RankedGameState copyWith({
+    // Match-level
+    List<GamePuzzle>? matchQueue,
+    int? currentPuzzleIndex,
+    int? totalScore,
+    DateTime? matchStartTime,
+
+    // Bot opponent
+    bool? playingAgainstBot,
+    String? botName,
+    int? botElo,
+    int? botScore,
+    int? botCurrentPuzzleIndex,
+    double? botPuzzleProgress,
+    bool? showEndDialog,
+    DateTime? botPuzzleStartTime,
+
+    // Current puzzle
     int? target,
     List<int>? availableNumbers,
     String? expression,
@@ -123,6 +187,18 @@ class RankedGameState {
     int? cursorPosition,
   }) {
     return RankedGameState(
+      matchQueue: matchQueue ?? this.matchQueue,
+      currentPuzzleIndex: currentPuzzleIndex ?? this.currentPuzzleIndex,
+      totalScore: totalScore ?? this.totalScore,
+      matchStartTime: matchStartTime ?? this.matchStartTime,
+      playingAgainstBot: playingAgainstBot ?? this.playingAgainstBot,
+      botName: botName ?? this.botName,
+      botElo: botElo ?? this.botElo,
+      botScore: botScore ?? this.botScore,
+      botCurrentPuzzleIndex: botCurrentPuzzleIndex ?? this.botCurrentPuzzleIndex,
+      botPuzzleProgress: botPuzzleProgress ?? this.botPuzzleProgress,
+      showEndDialog: showEndDialog ?? this.showEndDialog,
+      botPuzzleStartTime: botPuzzleStartTime ?? this.botPuzzleStartTime,
       target: target ?? this.target,
       availableNumbers: availableNumbers ?? this.availableNumbers,
       expression: expression ?? this.expression,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:matharena/features/game/presentation/pages/ranked_page.dart';
+import 'package:matharena/features/game/presentation/pages/ranked_page_fixed.dart';
 import 'package:matharena/features/training/presentation/pages/training_page.dart';
 import 'package:matharena/features/game/presentation/pages/stats_page.dart';
 

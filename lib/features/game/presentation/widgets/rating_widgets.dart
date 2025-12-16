@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../../domain/repositories/rating_storage.dart';
-import '../../domain/logic/elo_calculator.dart';
 
 class RatingProfileWidget extends ConsumerWidget {
   const RatingProfileWidget({super.key});

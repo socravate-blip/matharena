@@ -6,6 +6,8 @@ import '../logic/elo_calculator.dart';
 
 /// Stockage et gestion du profil de rating du joueur
 class PlayerRatingProfile {
+  String playerName;
+  String playerId;
   int currentRating;
   int peakRating;
   int gamesPlayed;
@@ -16,6 +18,8 @@ class PlayerRatingProfile {
   List<RatingHistory> history;
 
   PlayerRatingProfile({
+    this.playerName = '',
+    this.playerId = '',
     this.currentRating = 1200,
     this.peakRating = 1200,
     this.gamesPlayed = 0,
@@ -32,6 +36,8 @@ class PlayerRatingProfile {
 
   Map<String, dynamic> toMap() {
     return {
+      'playerName': playerName,
+      'playerId': playerId,
       'currentRating': currentRating,
       'peakRating': peakRating,
       'gamesPlayed': gamesPlayed,
@@ -45,6 +51,8 @@ class PlayerRatingProfile {
 
   factory PlayerRatingProfile.fromMap(Map<String, dynamic> map) {
     return PlayerRatingProfile(
+      playerName: map['playerName'] ?? '',
+      playerId: map['playerId'] ?? '',
       currentRating: map['currentRating'] ?? 1200,
       peakRating: map['peakRating'] ?? 1200,
       gamesPlayed: map['gamesPlayed'] ?? 0,
@@ -78,10 +86,24 @@ class RatingStorage {
     await init();
     final jsonString = _prefs!.getString(_profileKey);
     if (jsonString == null) {
-      return PlayerRatingProfile();
+      // Generate unique player name on first launch
+      final randomNum = Random().nextInt(9999);
+      return PlayerRatingProfile(
+        playerName: 'Player#$randomNum',
+        playerId: '', // Will be set when Firebase Auth is initialized
+      );
     }
     final map = jsonDecode(jsonString) as Map<String, dynamic>;
-    return PlayerRatingProfile.fromMap(map);
+    final profile = PlayerRatingProfile.fromMap(map);
+    
+    // Ensure playerName exists for old profiles
+    if (profile.playerName.isEmpty) {
+      final randomNum = Random().nextInt(9999);
+      profile.playerName = 'Player#$randomNum';
+      await saveProfile(profile);
+    }
+    
+    return profile;
   }
 
   /// Sauvegarde le profil
@@ -157,6 +179,16 @@ class RatingStorage {
   Future<void> resetProfile() async {
     await init();
     await _prefs!.remove(_profileKey);
+  }
+
+  /// DEBUG: Change rapidement l'ELO pour tester les différentes leagues
+  Future<void> debugSetElo(int newElo) async {
+    final profile = await getProfile();
+    profile.currentRating = newElo.clamp(100, 3000);
+    profile.peakRating = profile.currentRating > profile.peakRating
+        ? profile.currentRating
+        : profile.peakRating;
+    await saveProfile(profile);
   }
 }
 
