@@ -84,7 +84,7 @@ class MultiplayerMatch {
 
   factory MultiplayerMatch.fromJson(Map<String, dynamic> json) {
     // Helper to safely convert Firebase LinkedMaps to Map<String, dynamic>
-    Map<String, dynamic> _convertMap(dynamic value) {
+    Map<String, dynamic> convertMap(dynamic value) {
       if (value is Map<String, dynamic>) return value;
       if (value is Map) {
         return value.map((k, v) => MapEntry(k.toString(), v));
@@ -112,10 +112,10 @@ class MultiplayerMatch {
     
     return MultiplayerMatch(
       matchId: json['matchId'] as String,
-      player1: MatchPlayer.fromJson(_convertMap(json['player1'])),
-      player2: MatchPlayer.fromJson(_convertMap(json['player2'])),
+      player1: MatchPlayer.fromJson(convertMap(json['player1'])),
+      player2: MatchPlayer.fromJson(convertMap(json['player2'])),
       puzzles: (json['puzzles'] as List? ?? [])
-          .map((e) => _convertMap(e))
+          .map((e) => convertMap(e))
           .toList(),
       state: parseState(json['state']),
       createdAt: parseTimestamp(json['createdAt']),
