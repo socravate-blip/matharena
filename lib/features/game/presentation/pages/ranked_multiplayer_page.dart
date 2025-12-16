@@ -5,10 +5,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/models/match_model.dart';
 import '../../domain/models/puzzle.dart';
+import '../../domain/models/player_stats.dart';
 import '../../domain/services/firebase_multiplayer_service.dart';
+import '../../domain/services/stats_service.dart';
 import '../../domain/logic/elo_calculator.dart';
+import '../../domain/logic/progression_system.dart';
 import '../../domain/repositories/rating_storage.dart';
 import '../widgets/realtime_opponent_progress.dart';
+import '../widgets/rank_up_animation.dart';
+import '../widgets/opponent_card.dart';
 
 /// Page Ranked avec Waiting Room et synchronisation temps réel
 class RankedMultiplayerPage extends StatefulWidget {
@@ -41,10 +46,30 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
   int? _newElo;
   bool _eloCalculated = false;
 
+  // Stats tracking
+  final List<PuzzleSolveData> _solveHistory = [];
+  int _matchStartTime = 0;
+  int _puzzleStartTime = 0;
+  PlayerStats? _playerStats;
+
   @override
   void initState() {
     super.initState();
     _myUid = FirebaseAuth.instance.currentUser?.uid;
+    _matchStartTime = DateTime.now().millisecondsSinceEpoch;
+    _puzzleStartTime = DateTime.now().millisecondsSinceEpoch;
+    _loadPlayerStats();
+  }
+
+  Future<void> _loadPlayerStats() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final stats = await StatsService().getPlayerStats(uid);
+
+    setState(() {
+      _playerStats = stats;
+    });
   }
 
   @override
@@ -183,51 +208,77 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
   }
 
   Widget _buildCountdownScreen(String? opponentNickname) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'ADVERSAIRE TROUVÉ !',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.cyan,
-                letterSpacing: 2,
-              ),
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _service.streamMatch(widget.matchId),
+      builder: (context, snapshot) {
+        PlayerData? opponentData;
+        if (snapshot.hasData) {
+          final matchData = snapshot.data!.data() as Map<String, dynamic>?;
+          if (matchData != null) {
+            final match = MatchModel.fromMap(matchData);
+            opponentData = match.getOpponentData(_myUid!);
+          }
+        }
+
+        return Scaffold(
+          backgroundColor: const Color(0xFF0A0A0A),
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'ADVERSAIRE TROUVÉ !',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.cyan,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // OpponentCard
+                if (opponentData != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: FutureBuilder<PlayerStats>(
+                      future: StatsService().getPlayerStats(opponentData.uid),
+                      builder: (context, statsSnapshot) {
+                        final stats = statsSnapshot.data;
+                        return OpponentCard(
+                          nickname: opponentData!.nickname,
+                          elo: opponentData.elo,
+                          winStreak: stats?.currentWinStreak,
+                          loseStreak: stats?.currentLoseStreak,
+                          totalGames: stats?.totalGames,
+                          isFound: true,
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 64),
+                Text(
+                  _countdownSeconds != null ? '$_countdownSeconds' : '3',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 120,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Text(
+                  'LA PARTIE COMMENCE...',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              'vs ${opponentNickname ?? "???"}',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                color: Colors.orange,
-              ),
-            ),
-            const SizedBox(height: 64),
-            Text(
-              _countdownSeconds != null ? '$_countdownSeconds' : '3',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 120,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                height: 1,
-              ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'LA PARTIE COMMENCE...',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: Colors.grey[600],
-                letterSpacing: 1,
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -495,9 +546,58 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
               color: Colors.orange,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.red),
-            onPressed: () => _showAbandonDialog(),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Afficher le streak
+              if (_playerStats != null && _playerStats!.currentStreak != 0)
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _playerStats!.currentStreak > 0
+                        ? Colors.orange.withOpacity(0.2)
+                        : Colors.blue.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _playerStats!.currentStreak > 0
+                          ? Colors.orange
+                          : Colors.blue,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _playerStats!.currentStreak > 0
+                            ? Icons.whatshot
+                            : Icons.ac_unit,
+                        color: _playerStats!.currentStreak > 0
+                            ? Colors.orange
+                            : Colors.blue,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_playerStats!.currentStreak.abs()}',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _playerStats!.currentStreak > 0
+                              ? Colors.orange
+                              : Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.red),
+                onPressed: () => _showAbandonDialog(),
+              ),
+            ],
           ),
         ],
       ),
@@ -753,11 +853,24 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
     final isCorrect =
         userAnswerInt != null && currentPuzzle.validateAnswer(userAnswerInt);
 
+    // Tracker le solve
+    final responseTime =
+        DateTime.now().millisecondsSinceEpoch - _puzzleStartTime;
+    final puzzleType = _getCurrentPuzzleType();
+
+    _solveHistory.add(PuzzleSolveData(
+      puzzleType: puzzleType,
+      isCorrect: isCorrect,
+      responseTime: responseTime,
+    ));
+
     if (isCorrect) {
       setState(() {
         _myScore += currentPuzzle.maxPoints;
         _currentPuzzleIndex++;
         _userAnswer = '';
+        _puzzleStartTime =
+            DateTime.now().millisecondsSinceEpoch; // Reset pour prochain puzzle
       });
 
       // Mise à jour Firebase
@@ -825,11 +938,137 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
       // Mettre à jour dans Firebase
       await _service.updateUserProfile(uid, elo: newElo);
 
+      // Mettre à jour les stats
+      await _updateStatsAfterMatch(iWon, isDraw, newElo, myProfile.gamesPlayed);
+
+      // Vérifier montée de rang
+      _checkRankUp(myElo, newElo, myProfile.gamesPlayed);
+
       print(
           '📊 ELO: $myElo → $newElo (${newElo - myElo > 0 ? "+" : ""}${newElo - myElo})');
     } catch (e) {
       print('❌ Erreur lors du calcul ELO: $e');
     }
+  }
+
+  Future<void> _updateStatsAfterMatch(
+      bool isWin, bool isDraw, int newElo, int oldGamesPlayed) async {
+    final uid = _myUid;
+    if (uid == null) return;
+
+    try {
+      final matchDuration =
+          (DateTime.now().millisecondsSinceEpoch - _matchStartTime) ~/ 1000;
+
+      await StatsService().updateStatsAfterMatch(
+        uid: uid,
+        isWin: isWin,
+        newElo: newElo,
+        matchDuration: matchDuration,
+        solves: _solveHistory,
+      );
+
+      print('✅ Stats mises à jour avec succès');
+    } catch (e) {
+      print('❌ Erreur mise à jour stats: $e');
+    }
+  }
+
+  void _checkRankUp(int oldElo, int newElo, int oldGamesPlayed) {
+    try {
+      final oldProgression =
+          ProgressionSystem.getProgressionData(oldElo, oldGamesPlayed);
+      final newProgression =
+          ProgressionSystem.getProgressionData(newElo, oldGamesPlayed + 1);
+
+      // Montée de ligue
+      if (newProgression.league != oldProgression.league) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => RankUpAnimation(
+                newRankName: newProgression.league.name,
+                newRankIcon: newProgression.league.icon,
+                rankColor: newProgression.league.color,
+                onComplete: () => Navigator.of(context).pop(),
+              ),
+            );
+          }
+        });
+      }
+
+      // Nouveau milestone
+      final nextMilestone = newProgression.nextMilestone;
+      if (newElo >= nextMilestone.elo && oldElo < nextMilestone.elo) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: const Color(0xFF1A1A1A),
+                title: Row(
+                  children: [
+                    const Icon(Icons.emoji_events,
+                        color: Colors.amber, size: 32),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Nouveau Palier !',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      nextMilestone.name,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 24,
+                        color: Colors.amber,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Récompense: ${nextMilestone.reward}',
+                      style: GoogleFonts.inter(color: Colors.grey[400]),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Super !',
+                      style: GoogleFonts.inter(color: Colors.cyan),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+        });
+      }
+    } catch (e) {
+      print('⚠️ Erreur vérification rank-up: $e');
+    }
+  }
+
+  String _getCurrentPuzzleType() {
+    if (_puzzles.isEmpty || _currentPuzzleIndex >= _puzzles.length) {
+      return 'basic';
+    }
+
+    final puzzle = _puzzles[_currentPuzzleIndex];
+    if (puzzle is BasicPuzzle) return 'basic';
+    if (puzzle is ComplexPuzzle) return 'complex';
+    // Game24 et Mathadore peuvent être ajoutés plus tard
+    return 'basic';
   }
 
   void _showAbandonDialog() {

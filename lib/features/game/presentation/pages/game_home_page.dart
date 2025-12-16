@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:matharena/features/game/presentation/pages/ranked_matchmaking_page.dart';
 import 'package:matharena/features/training/presentation/pages/training_page.dart';
-import 'package:matharena/features/game/presentation/pages/stats_page.dart';
+import 'package:matharena/features/game/presentation/pages/advanced_stats_page.dart';
 
 class GameHomePage extends ConsumerStatefulWidget {
   const GameHomePage({super.key});
@@ -18,7 +18,7 @@ class _GameHomePageState extends ConsumerState<GameHomePage> {
   final List<Widget> _pages = [
     const RankedMatchmakingPage(),
     const TrainingPage(),
-    const StatsPage(),
+    const AdvancedStatsPage(),
   ];
 
   @override

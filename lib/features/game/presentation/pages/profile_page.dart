@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../domain/services/firebase_multiplayer_service.dart';
+import '../../domain/services/stats_service.dart';
 import '../../domain/logic/progression_system.dart';
 import '../widgets/progression_widget.dart';
+import '../widgets/elo_evolution_chart.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Page de profil pour changer le pseudo et voir l'ELO
@@ -114,7 +116,31 @@ class _ProfilePageState extends State<ProfilePage> {
                   if (_progressionData != null)
                     ProgressionWidget(progression: _progressionData!),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
+
+                  // ELO Evolution Chart
+                  FutureBuilder(
+                    future: StatsService().getPlayerStats(
+                      FirebaseAuth.instance.currentUser?.uid ?? '',
+                    ),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData &&
+                          snapshot.data!.eloHistory.isNotEmpty) {
+                        return Column(
+                          children: [
+                            EloEvolutionChart(
+                              eloHistory: snapshot.data!.eloHistory,
+                              currentElo: _currentElo,
+                              accentColor:
+                                  _progressionData?.league.color ?? Colors.cyan,
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        );
+                      }
+                      return const SizedBox();
+                    },
+                  ),
 
                   // Nickname Section
                   Text(
