@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import '../../domain/logic/matador_engine.dart';
 
 /// Game state class
@@ -72,15 +73,15 @@ class GameNotifier extends Notifier<GameState> {
     );
   }
 
-  /// Starts a new game using the advanced level generator
-  void startGame() {
+  /// Starts a new game using the advanced level generator.
+  ///
+  /// Heavy solution generation is computed off the UI thread to avoid jank.
+  Future<void> startGame() async {
     final level = _engine.generateLevel();
     final target = level['target'] as int;
-    final numbers = level['numbers'] as List<int>;
-    
-    // Pre-calculate all solutions
-    final solutions = _engine.solve(numbers, target);
+    final numbers = (level['numbers'] as List<dynamic>).cast<int>();
 
+    // Start immediately; fill solutions asynchronously.
     state = GameState(
       target: target,
       availableNumbers: numbers,
@@ -90,8 +91,17 @@ class GameNotifier extends Notifier<GameState> {
       message: 'Make $target using these numbers!',
       isMatadorSolution: false,
       usedNumberIndices: {},
-      solutions: solutions,
+      solutions: const [],
     );
+
+    final solutions = await compute(_solveMatadorSolutions, {
+      'numbers': numbers,
+      'target': target,
+    });
+
+    if (!ref.mounted) return;
+    // Keep current expression/score in case the player already started.
+    state = state.copyWith(solutions: solutions);
   }
 
   /// Adds a value to the expression
@@ -203,12 +213,21 @@ class GameNotifier extends Notifier<GameState> {
       );
 
       // Start next round after a short delay
-      Future.delayed(const Duration(seconds: 2), startGame);
+      Future.delayed(const Duration(seconds: 2), () {
+        startGame();
+      });
     } else {
       state = state.copyWith(
         message: '❌ Wrong! Target: ${state.target}, Got: $result',
       );
     }
+  }
+
+  static List<String> _solveMatadorSolutions(Map<String, dynamic> args) {
+    final numbers = (args['numbers'] as List<dynamic>).cast<int>();
+    final target = args['target'] as int;
+    final engine = MatadorEngine();
+    return engine.solve(numbers, target);
   }
 
   /// Calculates score based on operators and returns breakdown string

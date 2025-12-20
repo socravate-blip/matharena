@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matharena/features/game/domain/logic/bot_ai.dart';
 import 'package:matharena/features/game/domain/logic/placement_manager.dart';
-import 'package:matharena/features/game/domain/logic/adaptive_matchmaking.dart';
+import 'package:matharena/features/game/domain/logic/matchmaking_logic.dart';
 import 'package:matharena/features/game/domain/models/player_stats.dart';
 import 'package:matharena/features/game/domain/models/puzzle.dart';
 
@@ -406,8 +406,8 @@ void main() {
     });
   });
 
-  group('AdaptiveMatchmaking', () {
-    final matchmaking = AdaptiveMatchmaking();
+  group('MatchmakingLogic', () {
+    final matchmaking = MatchmakingLogic();
 
     test('First ranked match never gets Boss bot', () {
       final stats = PlayerStats(totalGames: 0);
@@ -422,7 +422,7 @@ void main() {
     });
 
     test('LoseStreak >= 3 always gets Underdog bot', () {
-      final stats = PlayerStats(currentLoseStreak: 5);
+      final stats = PlayerStats(totalGames: 10, currentLoseStreak: 5);
 
       for (int i = 0; i < 10; i++) {
         final difficulty = matchmaking.selectBotDifficulty(
@@ -434,7 +434,7 @@ void main() {
     });
 
     test('WinStreak >= 5 gets Boss or Competitive', () {
-      final stats = PlayerStats(currentWinStreak: 6);
+      final stats = PlayerStats(totalGames: 10, currentWinStreak: 6);
 
       for (int i = 0; i < 20; i++) {
         final difficulty = matchmaking.selectBotDifficulty(
@@ -447,7 +447,7 @@ void main() {
     });
 
     test('Bot opponent has correct ELO range for Underdog', () {
-      final stats = PlayerStats(currentLoseStreak: 3);
+      final stats = PlayerStats(totalGames: 10, currentLoseStreak: 3);
       final bot = matchmaking.createBotOpponent(
         playerElo: 1200,
         stats: stats,
@@ -461,7 +461,7 @@ void main() {
     });
 
     test('Bot opponent has correct ELO range for Boss', () {
-      final stats = PlayerStats(currentWinStreak: 6);
+      final stats = PlayerStats(totalGames: 10, currentWinStreak: 6);
 
       // Run multiple times to likely get a Boss bot
       bool foundBoss = false;
@@ -652,7 +652,7 @@ void main() {
     });
 
     test('Complete ranked match flow with adaptive bot', () {
-      final matchmaking = AdaptiveMatchmaking();
+      final matchmaking = MatchmakingLogic();
 
       // Scenario: Player on LoseStreak
       final stats = PlayerStats(

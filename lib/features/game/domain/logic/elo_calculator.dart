@@ -116,6 +116,30 @@ class EloCalculator {
     return 'Diamond';
   }
 
+  /// More granular rank title (legacy helper migrated from old EloRatingSystem).
+  /// Kept for UI flexibility while retaining getLeagueName() semantics.
+  static String getRankTitle(int rating) {
+    if (rating < 1000) return 'Bronze';
+    if (rating < 1200) return 'Silver';
+    if (rating < 1400) return 'Gold';
+    if (rating < 1600) return 'Platinum';
+    if (rating < 1800) return 'Diamond';
+    if (rating < 2000) return 'Master';
+    if (rating < 2200) return 'Grandmaster';
+    return 'Legend';
+  }
+
+  static String getRankIcon(int rating) {
+    if (rating < 1000) return '🥉';
+    if (rating < 1200) return '🥈';
+    if (rating < 1400) return '🥇';
+    if (rating < 1600) return '💎';
+    if (rating < 1800) return '💠';
+    if (rating < 2000) return '👑';
+    if (rating < 2200) return '⭐';
+    return '🏆';
+  }
+
   /// Gets league icon/emoji based on rating
   static String getLeagueIcon(int rating) {
     if (rating < 1200) return '🥉';
@@ -130,6 +154,18 @@ class EloCalculator {
     if (rating < 1500) return const Color(0xFFC0C0C0); // Silver
     if (rating < 1800) return const Color(0xFFFFD700); // Gold
     return const Color(0xFFB9F2FF); // Diamond
+  }
+
+  /// Rank color (legacy helper). Returns a Color instead of a hex string.
+  static Color getRankColor(int rating) {
+    if (rating < 1000) return const Color(0xFFCD7F32); // Bronze
+    if (rating < 1200) return const Color(0xFFC0C0C0); // Silver
+    if (rating < 1400) return const Color(0xFFFFD700); // Gold
+    if (rating < 1600) return const Color(0xFFE5E4E2); // Platinum
+    if (rating < 1800) return const Color(0xFFB9F2FF); // Diamond
+    if (rating < 2000) return const Color(0xFF9D00FF); // Master
+    if (rating < 2200) return const Color(0xFFFF1493); // Grandmaster
+    return const Color(0xFFFF0000); // Legend
   }
 
   // Helper method: Calculate 10^x efficiently

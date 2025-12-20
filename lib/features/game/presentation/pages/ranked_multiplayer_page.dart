@@ -1354,12 +1354,14 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
       () {
         if (!mounted || !_isGhostMode) return;
 
+        final newBotIndex =
+            botPuzzleIndex + (botResponse.isCorrect ? 1 : 0);
+
         print(
             '🤖 Bot termine puzzle #${botPuzzleIndex + 1}: ${botResponse.isCorrect ? "CORRECT" : "INCORRECT"}');
 
         setState(() {
           // Mettre à jour le score et le progrès du bot
-          final newBotIndex = botPuzzleIndex + 1;
           final botProgress = newBotIndex / _puzzles.length;
           final botScore = (orchestrator.match.player2?.score ?? 0) +
               (botResponse.isCorrect ? currentBotPuzzle.maxPoints : 0);
@@ -1385,7 +1387,7 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
         });
 
         // Relancer la boucle pour le puzzle suivant (récursif)
-        if (botPuzzleIndex + 1 < _puzzles.length) {
+        if (newBotIndex < _puzzles.length) {
           _startBotProgressionLoop();
         } else {
           // Le bot a terminé!

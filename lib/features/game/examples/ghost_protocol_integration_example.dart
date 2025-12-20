@@ -2,8 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../domain/logic/bot_persona_generator.dart';
 import '../domain/services/ghost_match_orchestrator.dart';
-import '../domain/logic/adaptive_matchmaking.dart';
-import '../domain/logic/puzzle_generator.dart';
+import '../domain/logic/matchmaking_logic.dart';
 import '../domain/models/match_model.dart';
 import '../domain/repositories/rating_storage.dart';
 
@@ -29,9 +28,8 @@ class GhostProtocolIntegrationExample {
     final myProfile = await storage.getProfile();
     
     // 2. Créer l'orchestrateur Ghost
-    final matchmaking = AdaptiveMatchmaking();
-    final puzzleGen = PuzzleGenerator();
-    final orchestrator = GhostMatchOrchestrator(matchmaking, puzzleGen);
+    final matchmaking = MatchmakingLogic();
+    final orchestrator = GhostMatchOrchestrator(matchmaking);
     
     // 3. Créer le Ghost Match (Invisible pour le joueur)
     final ghostData = await orchestrator.createGhostMatch(
@@ -67,7 +65,7 @@ class GhostProtocolIntegrationExample {
     print('🎯 Puzzle $currentPuzzleIndex: En attente réponse bot...');
     
     // Le bot calcule et répond
-    final botResponse = await orchestrator.simulateBotResponse(
+    final botResponse = orchestrator.simulateBotResponse(
       bot: ghostData.bot,
       puzzle: puzzle,
       playerHistoricalAvgMs: ghostData.playerHistoricalAvgMs,

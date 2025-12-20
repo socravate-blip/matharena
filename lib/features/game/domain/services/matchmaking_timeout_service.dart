@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../logic/bot_ai.dart';
-import '../logic/adaptive_matchmaking.dart';
+import '../logic/matchmaking_logic.dart';
 import '../models/player_stats.dart';
 import '../models/puzzle.dart';
 import '../logic/puzzle_generator.dart';
@@ -11,7 +11,7 @@ import '../../presentation/providers/adaptive_providers.dart';
 /// Service qui gère le timeout du matchmaking multijoueur
 /// Si aucun adversaire n'est trouvé après 5 secondes, lance un match contre un bot
 class MatchmakingTimeoutService {
-  final AdaptiveMatchmaking _matchmaking;
+  final MatchmakingLogic _matchmaking;
   Timer? _timeoutTimer;
 
   MatchmakingTimeoutService(this._matchmaking);

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/match_model.dart';
 import '../logic/puzzle_generator.dart';
+import '../models/match_constants.dart';
 
 /// Service Firebase Multijoueur avec Waiting Room
 /// Synchronisation temps réel des deux joueurs
@@ -102,7 +103,7 @@ class FirebaseMultiplayerService {
 
     await matchRef.set({
       'matchId': matchRef.id,
-      'status': 'waiting', // CRUCIAL: En attente d'adversaire
+      'status': MatchConstants.matchWaiting, // CRUCIAL: En attente d'adversaire
       'createdAt': FieldValue.serverTimestamp(),
       'puzzles': puzzleMaps,
       'averageElo': playerElo, // Stocker l'ELO pour recalcul à la jointure
@@ -112,7 +113,7 @@ class FirebaseMultiplayerService {
         'elo': userProfile['elo'] ?? 1200,
         'progress': 0.0,
         'score': 0,
-        'status': 'active',
+        'status': MatchConstants.playerActive,
       },
       'player2': null, // Pas encore d'adversaire
     });
@@ -131,65 +132,69 @@ class FirebaseMultiplayerService {
 
     print('🔍 Recherche d\'un match disponible...');
 
-    // Chercher un match en attente (query simplifiée sans index)
-    final query =
-        await _matchesRef.where('status', isEqualTo: 'waiting').limit(5).get();
+    // Chercher quelques candidats en attente
+    final query = await _matchesRef
+        .where('status', isEqualTo: MatchConstants.matchWaiting)
+        .limit(10)
+        .get();
 
     if (query.docs.isEmpty) {
       print('❌ Aucun match trouvé');
       return null;
     }
 
-    // Filtrer manuellement pour éviter de rejoindre son propre match
-    DocumentSnapshot? availableMatch;
-    for (final doc in query.docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final player1Uid = data['player1']?['uid'];
-      if (player1Uid != user.uid) {
-        availableMatch = doc;
-        break;
+    // Tenter de rejoindre en transaction pour éviter la race condition.
+    for (final candidate in query.docs) {
+      final matchRef = candidate.reference;
+      try {
+        final joined = await _firestore.runTransaction<String?>((tx) async {
+          final snap = await tx.get(matchRef);
+          if (!snap.exists) return null;
+          final data = snap.data() as Map<String, dynamic>;
+
+          // Recheck: still waiting and not our own match
+          if (data['status'] != MatchConstants.matchWaiting) return null;
+          final player1 = data['player1'] as Map<String, dynamic>?;
+          final player1Uid = player1?['uid'] as String?;
+          if (player1Uid == null || player1Uid == user.uid) return null;
+          if (data['player2'] != null) return null;
+
+          final player1Elo = (player1?['elo'] as int?) ?? 1200;
+          final averageElo = ((player1Elo + myElo) / 2).round();
+          final newPuzzles =
+              PuzzleGenerator.generateByElo(count: 25, averageElo: averageElo);
+          final puzzleMaps = newPuzzles.map((p) => p.toJson()).toList();
+
+          tx.update(matchRef, {
+            'status': MatchConstants.matchStarting,
+            'startTime': FieldValue.serverTimestamp(),
+            'puzzles': puzzleMaps,
+            'averageElo': averageElo,
+            'player2': {
+              'uid': user.uid,
+              'nickname': userProfile['nickname'] ?? 'Joueur 2',
+              'elo': myElo,
+              'progress': 0.0,
+              'score': 0,
+              'status': MatchConstants.playerActive,
+            },
+          });
+
+          return snap.id;
+        });
+
+        if (joined != null) {
+          print('🎯 Match rejoint (transaction)! Démarrage imminent...');
+          return joined;
+        }
+      } catch (e) {
+        // Transaction failed (likely race). Try next candidate.
+        print('⚠️ Transaction join failed, retrying: $e');
       }
     }
 
-    if (availableMatch == null) {
-      print('❌ Aucun match compatible trouvé');
-      return null;
-    }
-
-    final matchId = availableMatch.id;
-    final matchData = availableMatch.data() as Map<String, dynamic>;
-    final player1Data = matchData['player1'] as Map<String, dynamic>;
-    final player1Elo = player1Data['elo'] as int? ?? 1200;
-
-    // Calculer l'ELO moyen des deux joueurs
-    final averageElo = ((player1Elo + myElo) / 2).round();
-
-    // Regénérer les puzzles avec l'ELO moyen
-    final newPuzzles =
-        PuzzleGenerator.generateByElo(count: 25, averageElo: averageElo);
-    final puzzleMaps = newPuzzles.map((p) => p.toJson()).toList();
-
-    print(
-        '🔄 Recalcul puzzles: ELO moyen = $averageElo (P1: $player1Elo, P2: $myElo)');
-
-    // Rejoindre le match et déclencher le démarrage
-    await availableMatch.reference.update({
-      'status': 'starting', // Déclencheur pour les 2 joueurs
-      'startTime': FieldValue.serverTimestamp(),
-      'puzzles': puzzleMaps, // Mettre à jour avec les puzzles adaptés
-      'averageElo': averageElo,
-      'player2': {
-        'uid': user.uid,
-        'nickname': userProfile['nickname'] ?? 'Joueur 2',
-        'elo': myElo,
-        'progress': 0.0,
-        'score': 0,
-        'status': 'active',
-      },
-    });
-
-    print('🎯 Match rejoint! Démarrage imminent...');
-    return matchId;
+    print('❌ Aucun match compatible trouvé (après transaction)');
+    return null;
   }
 
   // ============================================================
@@ -225,18 +230,43 @@ class FirebaseMultiplayerService {
     required int score,
   }) async {
     try {
-      final matchDoc = await _matchesRef.doc(matchId).get();
-      if (!matchDoc.exists) return;
+      final matchRef = _matchesRef.doc(matchId);
 
-      final matchData = matchDoc.data() as Map<String, dynamic>;
-      final player1 = matchData['player1'] as Map<String, dynamic>;
+      await _firestore.runTransaction((tx) async {
+        final snap = await tx.get(matchRef);
+        if (!snap.exists) return;
 
-      final isPlayer1 = player1['uid'] == uid;
-      final field = isPlayer1 ? 'player1' : 'player2';
+        final matchData = snap.data() as Map<String, dynamic>;
+        final player1 = matchData['player1'] as Map<String, dynamic>;
+        final isPlayer1 = player1['uid'] == uid;
+        final field = isPlayer1 ? 'player1' : 'player2';
 
-      await _matchesRef.doc(matchId).update({
-        '$field.progress': percentage,
-        '$field.score': score,
+        final currentPlayer = matchData[field] as Map<String, dynamic>?;
+        if (currentPlayer == null) return;
+
+        final oldProgress = (currentPlayer['progress'] as num?)?.toDouble() ?? 0.0;
+        final oldScore = currentPlayer['score'] as int? ?? 0;
+
+        // Clamp and enforce monotonic updates to reduce obvious cheating/noise.
+        final clampedProgress = percentage.clamp(0.0, 1.0);
+
+        // Cap score to the total possible score in this match.
+        final puzzles = (matchData['puzzles'] as List<dynamic>?);
+        final totalMaxScore = puzzles == null
+            ? 999999
+            : puzzles
+                .map((p) => (p as Map)['maxPoints'] as int? ?? 0)
+                .fold<int>(0, (a, b) => a + b);
+
+        final clampedScore = score.clamp(0, totalMaxScore);
+
+        final newProgress = clampedProgress < oldProgress ? oldProgress : clampedProgress;
+        final newScore = clampedScore < oldScore ? oldScore : clampedScore;
+
+        tx.update(matchRef, {
+          '$field.progress': newProgress,
+          '$field.score': newScore,
+        });
       });
 
       print(
@@ -262,7 +292,7 @@ class FirebaseMultiplayerService {
     final field = isPlayer1 ? 'player1' : 'player2';
 
     await _matchesRef.doc(matchId).update({
-      '$field.status': 'finished',
+      '$field.status': MatchConstants.playerFinished,
       '$field.finishedAt': FieldValue.serverTimestamp(),
     });
 
@@ -289,7 +319,7 @@ class FirebaseMultiplayerService {
     // Le match se termine dès que le PREMIER joueur finit (course de vitesse)
     if (p1Finished || p2Finished) {
       await _matchesRef.doc(matchId).update({
-        'status': 'finished',
+        'status': MatchConstants.matchFinished,
         'finishedAt': FieldValue.serverTimestamp(),
       });
 
@@ -300,7 +330,7 @@ class FirebaseMultiplayerService {
   /// Démarrer le match (appelé après le compte à rebours)
   Future<void> startMatch(String matchId) async {
     await _matchesRef.doc(matchId).update({
-      'status': 'playing',
+      'status': MatchConstants.matchPlaying,
       'startedAt': FieldValue.serverTimestamp(),
     });
     print('▶️ Match démarré: $matchId');
@@ -315,7 +345,7 @@ class FirebaseMultiplayerService {
       final matchData = matchDoc.data() as Map<String, dynamic>;
 
       // Si le match n'a pas commencé, le supprimer
-      if (matchData['status'] == 'waiting') {
+      if (matchData['status'] == MatchConstants.matchWaiting) {
         await _matchesRef.doc(matchId).delete();
         print('🗑️ Match supprimé: $matchId');
       } else {
@@ -324,7 +354,7 @@ class FirebaseMultiplayerService {
         final field = player1['uid'] == uid ? 'player1' : 'player2';
 
         await _matchesRef.doc(matchId).update({
-          '$field.status': 'abandoned',
+          '$field.status': MatchConstants.playerAbandoned,
         });
         print('👋 Match abandonné par $uid');
       }

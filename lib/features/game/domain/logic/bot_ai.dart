@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'dart:math';
 import '../models/puzzle.dart';
-import 'package:math_expressions/math_expressions.dart';
 
 /// Bot difficulty levels for adaptive AI
 enum BotDifficulty {
@@ -262,6 +260,56 @@ class BotAI {
     return Duration(milliseconds: cappedDelayMs);
   }
 
+  /// Returns a per-puzzle accuracy probability (0..1).
+  ///
+  /// Underdog makes more mistakes; Boss rarely does.
+  double accuracy(GamePuzzle puzzle) {
+    // Base by difficulty
+    final base = switch (difficulty) {
+      BotDifficulty.underdog => 0.85,
+      BotDifficulty.competitive => 0.93,
+      BotDifficulty.boss => 0.99,
+    };
+
+    // Penalty by puzzle complexity
+    final penalty = switch (puzzle.type) {
+      PuzzleType.basic => 0.00,
+      PuzzleType.complex => 0.07,
+      PuzzleType.game24 => 0.18,
+      PuzzleType.matador => 0.25,
+    };
+
+    // Slight skill adjustment: higher ELO = slightly more accurate.
+    final skillBonus = ((skillLevel - 1200) / 2000).clamp(-0.05, 0.05);
+
+    return (base - penalty + skillBonus).clamp(0.05, 0.995);
+  }
+
+  /// Randomly determines whether the bot answers correctly.
+  bool rollIsCorrect(GamePuzzle puzzle) {
+    return _random.nextDouble() < accuracy(puzzle);
+  }
+
+  /// Extra time spent when the bot makes a mistake ("correction").
+  int mistakePenaltyMs(GamePuzzle puzzle) {
+    final (minMs, maxMs) = switch (puzzle.type) {
+      PuzzleType.basic => (400, 900),
+      PuzzleType.complex => (700, 1400),
+      PuzzleType.game24 => (1200, 3000),
+      PuzzleType.matador => (1500, 4000),
+    };
+
+    // Underdog tends to panic more, Boss corrects quicker.
+    final multiplier = switch (difficulty) {
+      BotDifficulty.underdog => 1.3,
+      BotDifficulty.competitive => 1.0,
+      BotDifficulty.boss => 0.75,
+    };
+
+    final raw = minMs + _random.nextInt(maxMs - minMs + 1);
+    return (raw * multiplier).round();
+  }
+
   /// Generate random number with Gaussian (normal) distribution
   /// Mean = 0, Standard deviation = 1
   double _gaussianRandom() {
@@ -271,138 +319,4 @@ class BotAI {
     return sqrt(-2 * log(u1)) * cos(2 * pi * u2);
   }
 
-  /// Le bot ne peut JAMAIS échouer - cette méthode retourne toujours 1.0
-  /// La difficulté affecte uniquement le TEMPS, pas la précision
-  @Deprecated('Le bot est infaillible - toujours 100% de réussite')
-  double getSuccessProbability(GamePuzzle puzzle) {
-    return 1.0; // Bot TOUJOURS réussit
-  }
-
-  /// Le bot retourne TOUJOURS la bonne réponse - pas de calcul nécessaire
-  @Deprecated('Le bot retourne simplement puzzle.targetValue')
-  int? solveArithmetic(GamePuzzle puzzle) {
-    // Le bot ne rate jamais - retourne toujours la bonne réponse
-    return puzzle.targetValue;
-  }
-
-  /// Le bot retourne TOUJOURS une expression correcte
-  @Deprecated('Le bot trouve toujours une solution valide')
-  String? solveExpression(GamePuzzle puzzle) {
-    // Le bot ne rate jamais - trouve toujours une solution
-    if (puzzle is Game24Puzzle) {
-      final solutions =
-          _findGame24Solutions(puzzle.availableNumbers, puzzle.targetValue);
-      if (solutions.isNotEmpty) {
-        return solutions.first;
-      }
-    }
-
-    if (puzzle is MatadorPuzzle) {
-      final solutions =
-          _findMatadorSolutions(puzzle.availableNumbers, puzzle.targetValue);
-      if (solutions.isNotEmpty) {
-        return solutions.first;
-      }
-    }
-
-    return null;
-  }
-
-  /// Simulate bot typing/input with realistic delays
-  Stream<String> simulateInput(String answer) async* {
-    // Typing speed based on skill (50-200 ms per character)
-    final baseDelayMs = 200 - ((skillLevel - 800) / 1200 * 150).toInt();
-
-    for (int i = 0; i < answer.length; i++) {
-      await Future.delayed(Duration(
-        milliseconds: baseDelayMs + _random.nextInt(50) - 25,
-      ));
-      yield answer.substring(0, i + 1);
-    }
-  }
-
-  /// Find possible Game24 solutions (simplified)
-  List<String> _findGame24Solutions(List<int> numbers, int target) {
-    final solutions = <String>[];
-
-    // Try common patterns for 4 numbers
-    if (numbers.length == 4) {
-      final a = numbers[0], b = numbers[1], c = numbers[2], d = numbers[3];
-
-      // Pattern: (a ○ b) ○ (c ○ d)
-      final ops = ['+', '-', '*', '/'];
-      for (final op1 in ops) {
-        for (final op2 in ops) {
-          for (final op3 in ops) {
-            final expr = '($a$op1$b)$op2($c$op3$d)';
-            try {
-              final result = _evaluateExpression(expr);
-              if (result == target) {
-                solutions.add(expr);
-              }
-            } catch (e) {
-              // Invalid expression, skip
-            }
-          }
-        }
-      }
-    }
-
-    return solutions.take(5).toList();
-  }
-
-  /// Find possible Matador solutions
-  List<String> _findMatadorSolutions(List<int> numbers, int target) {
-    final solutions = <String>[];
-
-    // Try various combinations
-    final a = numbers[0],
-        b = numbers[1],
-        c = numbers[2],
-        d = numbers[3],
-        e = numbers[4];
-
-    final ops = ['+', '-', '*', '/'];
-
-    // Try simple patterns (limit search for performance)
-    for (final op1 in ops) {
-      for (final op2 in ops) {
-        for (final op3 in ops) {
-          for (final op4 in ops) {
-            final expressions = [
-              '(($a$op1$b)$op2$c)$op3($d$op4$e)',
-              '($a$op1$b)$op2(($c$op3$d)$op4$e)',
-              '(($a$op1$b)$op2($c$op3$d))$op4$e',
-            ];
-
-            for (final expr in expressions) {
-              try {
-                final result = _evaluateExpression(expr);
-                if (result == target) {
-                  solutions.add(expr);
-                  if (solutions.length >= 10) return solutions;
-                }
-              } catch (e) {
-                // Invalid expression, skip
-              }
-            }
-          }
-        }
-      }
-    }
-
-    return solutions;
-  }
-
-  /// Helper to evaluate expressions
-  int? _evaluateExpression(String expression) {
-    try {
-      final Parser p = Parser();
-      final Expression exp = p.parse(expression);
-      final result = exp.evaluate(EvaluationType.REAL, ContextModel());
-      return result.round();
-    } catch (e) {
-      return null;
-    }
-  }
 }

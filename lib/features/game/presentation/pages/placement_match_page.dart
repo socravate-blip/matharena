@@ -102,18 +102,24 @@ class _PlacementMatchPageState extends State<PlacementMatchPage> {
     }
 
     final currentBotPuzzle = _puzzles[_botPuzzleIndex];
-    final delay = _bot.calculateDynamicDelay(
+    final baseDelay = _bot.calculateDynamicDelay(
       currentBotPuzzle,
       playerHistoricalAvgMs: _estimatePlayerHistoricalAvgMs(),
     );
+
+    final isCorrect = _bot.rollIsCorrect(currentBotPuzzle);
+    final penaltyMs = isCorrect ? 0 : _bot.mistakePenaltyMs(currentBotPuzzle);
+    final delay = baseDelay + Duration(milliseconds: penaltyMs);
 
     _botTimer?.cancel();
     _botTimer = Timer(delay, () {
       if (!mounted || !_isPlaying || _matchFinished) return;
 
       setState(() {
-        _botScore += currentBotPuzzle.maxPoints;
-        _botPuzzleIndex++;
+        if (isCorrect) {
+          _botScore += currentBotPuzzle.maxPoints;
+          _botPuzzleIndex++;
+        }
       });
 
       if (_botPuzzleIndex >= _puzzles.length) {

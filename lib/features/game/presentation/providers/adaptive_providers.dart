@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/logic/placement_manager.dart';
-import '../../domain/logic/adaptive_matchmaking.dart';
+import '../../domain/logic/matchmaking_logic.dart';
 import '../../domain/logic/bot_ai.dart';
 import '../../domain/models/player_stats.dart';
 import '../../domain/models/puzzle.dart';
@@ -87,9 +87,9 @@ class PlacementNotifier extends StateNotifier<PlacementState> {
 // MATCHMAKING SYSTEM PROVIDERS
 // ============================================================================
 
-/// Provider for adaptive matchmaking service
-final adaptiveMatchmakingProvider = Provider<AdaptiveMatchmaking>((ref) {
-  return AdaptiveMatchmaking();
+/// Provider for matchmaking (Engagement Director)
+final adaptiveMatchmakingProvider = Provider<MatchmakingLogic>((ref) {
+  return MatchmakingLogic();
 });
 
 /// Provider to check if player has completed placement

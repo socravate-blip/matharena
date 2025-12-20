@@ -2,6 +2,8 @@
 /// Gère la synchronisation des deux joueurs
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'match_constants.dart';
+
 class MatchModel {
   final String matchId;
   final String status; // 'waiting', 'starting', 'playing', 'finished'
@@ -59,10 +61,10 @@ class MatchModel {
   }
 
   bool get isFull => player2 != null;
-  bool get isWaiting => status == 'waiting';
-  bool get isStarting => status == 'starting';
-  bool get isPlaying => status == 'playing';
-  bool get isFinished => status == 'finished';
+  bool get isWaiting => status == MatchConstants.matchWaiting;
+  bool get isStarting => status == MatchConstants.matchStarting;
+  bool get isPlaying => status == MatchConstants.matchPlaying;
+  bool get isFinished => status == MatchConstants.matchFinished;
 
   /// Retourne les données du joueur adverse
   PlayerData? getOpponentData(String myUid) {
@@ -117,7 +119,7 @@ class PlayerData {
     required this.nickname,
     this.progress = 0.0,
     this.score = 0,
-    this.status = 'active',
+    this.status = MatchConstants.playerActive,
     this.elo = 1200,
     this.finishedAt,
   });

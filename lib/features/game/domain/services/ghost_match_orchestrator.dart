@@ -2,29 +2,19 @@ import 'dart:async';
 import 'dart:math';
 import '../logic/bot_ai.dart';
 import '../logic/bot_persona_generator.dart';
-import '../logic/adaptive_matchmaking.dart';
-import '../logic/smart_matchmaking_logic.dart';
+import '../logic/matchmaking_logic.dart';
 import '../logic/puzzle_generator.dart';
 import '../models/player_stats.dart';
 import '../models/puzzle.dart';
 import '../models/match_model.dart';
+import '../models/match_constants.dart';
 
 /// Service qui orchestre le "Ghost Protocol" - Le bot simule un vrai match Firebase
 /// L'UI ne fait AUCUNE différence entre un vrai joueur et un bot
 class GhostMatchOrchestrator {
-  final AdaptiveMatchmaking? _adaptiveMatchmaking;
-  final SmartMatchmakingLogic? _smartMatchmaking;
+  final MatchmakingLogic _matchmaking;
 
-  GhostMatchOrchestrator(
-    dynamic matchmaking,
-  )   : _adaptiveMatchmaking = matchmaking is AdaptiveMatchmaking ? matchmaking : null,
-        _smartMatchmaking = matchmaking is SmartMatchmakingLogic ? matchmaking : null {
-    if (_adaptiveMatchmaking == null && _smartMatchmaking == null) {
-      throw ArgumentError(
-        'matchmaking must be either AdaptiveMatchmaking or SmartMatchmakingLogic'
-      );
-    }
-  }
+  GhostMatchOrchestrator(this._matchmaking);
 
   /// Crée un faux match "Firebase-like" avec un bot
   /// Retourne toutes les données nécessaires pour que l'UI pense que c'est un vrai match
@@ -42,18 +32,10 @@ class GhostMatchOrchestrator {
       difficulty = forcedDifficulty;
       print('🎮 Using FORCED difficulty: ${difficulty.name}');
     } else {
-      // Utiliser SmartMatchmaking si disponible, sinon AdaptiveMatchmaking
-      if (_smartMatchmaking != null) {
-        difficulty = _smartMatchmaking!.selectBotDifficulty(
-          stats: playerStats ?? const PlayerStats(),
-          isFirstRankedMatch: (playerStats?.totalGames ?? 0) == 0,
-        );
-      } else {
-        difficulty = _adaptiveMatchmaking!.selectBotDifficulty(
-          stats: playerStats ?? const PlayerStats(),
-          isFirstRankedMatch: (playerStats?.totalGames ?? 0) == 0,
-        );
-      }
+      difficulty = _matchmaking.selectBotDifficulty(
+        stats: playerStats ?? const PlayerStats(),
+        isFirstRankedMatch: (playerStats?.totalGames ?? 0) == 0,
+      );
     }
 
     // 2. Créer le bot avec ce niveau
@@ -130,7 +112,7 @@ class GhostMatchOrchestrator {
 
     return MatchModel(
       matchId: matchId,
-      status: 'starting', // Commence en "starting" comme Firebase
+      status: MatchConstants.matchStarting, // Commence en "starting" comme Firebase
       createdAt: DateTime.now().millisecondsSinceEpoch,
       puzzles: puzzleMaps,
       player1: playerData,
@@ -146,7 +128,7 @@ class GhostMatchOrchestrator {
   }
 
   /// Crée un bot avec une difficulté spécifique (utilisé pour forcer la difficulté)
-  /// Contourne l'algorithme adaptatif de AdaptiveMatchmaking
+  /// Contourne l'algorithme d'Engagement Director (MatchmakingLogic)
   BotAI _createBotWithDifficulty({
     required int playerElo,
     required BotDifficulty difficulty,
@@ -181,8 +163,8 @@ class GhostMatchOrchestrator {
   /// IMPORTANT: Ne fait PAS d'attente ici, retourne juste le temps et le résultat
   /// L'attente est gérée par le Timer dans ranked_multiplayer_page
   /// 
-  /// LE BOT NE PEUT JAMAIS ÉCHOUER - isCorrect est TOUJOURS true
-  /// La difficulté affecte uniquement le TEMPS de réponse, pas la précision
+  /// Le bot peut échouer avec une probabilité réaliste (accuracy) et perd du temps
+  /// en cas d'erreur ("correction"), comme un humain.
   BotResponse simulateBotResponse({
     required BotAI bot,
     required GamePuzzle puzzle,
@@ -194,11 +176,13 @@ class GhostMatchOrchestrator {
       playerHistoricalAvgMs: playerHistoricalAvgMs,
     );
 
-    // 2. LE BOT RÉUSSIT TOUJOURS - pas de probabilité d'échec
-    // La difficulté influence uniquement la vitesse (delay), pas la précision
+    // 2. Probabilité d'erreur réaliste + pénalité de correction
+    final isCorrect = bot.rollIsCorrect(puzzle);
+    final penaltyMs = isCorrect ? 0 : bot.mistakePenaltyMs(puzzle);
+
     return BotResponse(
-      isCorrect: true, // TOUJOURS true - le bot ne rate jamais
-      responseTimeMs: delay.inMilliseconds,
+      isCorrect: isCorrect,
+      responseTimeMs: delay.inMilliseconds + penaltyMs,
     );
   }
 }

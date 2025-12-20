@@ -209,9 +209,9 @@ class GameSessionWithAdaptiveBot {
     // Wait for the calculated delay
     await Future.delayed(delay);
     
-    // Bot provides answer
-    final answer = bot.solveArithmetic(puzzle);
-    print('Bot answered: $answer');
+    // Bot would respond here (implementation depends on your game mode).
+    // The core game uses timing + correctness, not direct "answer" generation.
+    print('Bot attempted the puzzle');
   }
 
   /// Get average player response time
