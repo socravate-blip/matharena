@@ -182,35 +182,84 @@ class RankedMatchEngine {
 
   /// Generates a Game 24 puzzle with unique numbers and guaranteed solutions
   Game24Puzzle _generateGame24Puzzle(int puzzleId) {
-    // Verified solvable Game24 combinations - final clean list
-    final game24Sets = [
-      [1, 2, 3, 4], // (1+2+3)*4 = 24
-      [2, 3, 4, 5], // 2*(3+4+5) = 24
-      [1, 3, 4, 6], // 6/(1-3/4) = 24
-      [2, 4, 5, 6], // 6*5-4-2 = 24
-      [3, 5, 7, 9], // 9*5-7*3 = 24
-      [1, 3, 8, 9], // 9*8/3 = 24
-      [2, 5, 6, 7], // (7-5)*6*2 = 24
-      [3, 4, 6, 8], // (8+4)*6/3 = 24
-      [2, 3, 7, 8], // (8-2)*(7-3) = 24
-      [1, 4, 5, 6], // 6/(5/4-1) = 24
-      [2, 6, 7, 9], // (9-7)*6*2 = 24
-      [2, 4, 6, 9], // (9-6)*4*2 = 24
-      [1, 4, 8, 9], // 9*8/(4-1) = 24
-      [1, 5, 6, 9], // (9-5)*6 = 24
-      [3, 4, 7, 9], // (9-7)*4*3 = 24
-      [1, 3, 6, 7], // (7-3)*6 = 24
-      [1, 6, 8, 9], // (9-6)*8 = 24
-      [1, 2, 8, 9], // 9*8/(2+1) = 24
-      [3, 6, 8, 9], // 9*8/(6-3) = 24
+    // Generate random sets but validate solvability to avoid impossible rounds.
+    // Keep a small curated fallback for worst-case.
+    const curated = <List<int>>[
+      [1, 3, 4, 6],
+      [3, 3, 8, 8],
+      [2, 3, 4, 12],
+      [2, 3, 7, 8],
+      [1, 2, 8, 9],
+      [3, 6, 8, 9],
     ];
 
-    final numbers = game24Sets[_random.nextInt(game24Sets.length)];
+    List<int>? numbers;
+    for (int attempt = 0; attempt < 250; attempt++) {
+      final candidate = List<int>.generate(4, (_) => 1 + _random.nextInt(13));
+      if (_canMake24(candidate)) {
+        numbers = candidate;
+        break;
+      }
+    }
+
+    numbers ??= curated[_random.nextInt(curated.length)];
 
     return Game24Puzzle(
       id: 'game24_$puzzleId',
       availableNumbers: numbers,
     );
+  }
+
+  static bool _canMake24(List<int> numbers) {
+    final fracs = numbers.map((n) => _Frac(n, 1)).toList();
+    return _canReachTarget(fracs, const _Frac(24, 1));
+  }
+
+  static bool _canReachTarget(List<_Frac> nums, _Frac target) {
+    if (nums.length == 1) return nums[0] == target;
+
+    for (int i = 0; i < nums.length; i++) {
+      for (int j = i + 1; j < nums.length; j++) {
+        final a = nums[i];
+        final b = nums[j];
+
+        final remaining = <_Frac>[];
+        for (int k = 0; k < nums.length; k++) {
+          if (k != i && k != j) remaining.add(nums[k]);
+        }
+
+        // + and * are commutative
+        remaining.add(a + b);
+        if (_canReachTarget(remaining, target)) return true;
+        remaining.removeLast();
+
+        remaining.add(a * b);
+        if (_canReachTarget(remaining, target)) return true;
+        remaining.removeLast();
+
+        // - and / are not commutative
+        remaining.add(a - b);
+        if (_canReachTarget(remaining, target)) return true;
+        remaining.removeLast();
+
+        remaining.add(b - a);
+        if (_canReachTarget(remaining, target)) return true;
+        remaining.removeLast();
+
+        if (!b.isZero) {
+          remaining.add(a / b);
+          if (_canReachTarget(remaining, target)) return true;
+          remaining.removeLast();
+        }
+
+        if (!a.isZero) {
+          remaining.add(b / a);
+          if (_canReachTarget(remaining, target)) return true;
+          remaining.removeLast();
+        }
+      }
+    }
+    return false;
   }
 
   /// Generates a Matador puzzle using the existing MatadorEngine
@@ -254,5 +303,55 @@ class RankedMatchEngine {
     if (playerElo < 1500) return '🥈';
     if (playerElo < 1800) return '🥇';
     return '💎';
+  }
+}
+
+class _Frac {
+  final int n;
+  final int d;
+
+  const _Frac(int numerator, int denominator)
+      : n = denominator < 0 ? -numerator : numerator,
+        d = denominator < 0 ? -denominator : denominator;
+
+  bool get isZero => n == 0;
+
+  _Frac _reduce() {
+    if (n == 0) return const _Frac(0, 1);
+    final g = _gcd(n.abs(), d.abs());
+    return _Frac(n ~/ g, d ~/ g);
+  }
+
+  _Frac operator +(_Frac other) =>
+      _Frac(n * other.d + other.n * d, d * other.d)._reduce();
+
+  _Frac operator -(_Frac other) =>
+      _Frac(n * other.d - other.n * d, d * other.d)._reduce();
+
+  _Frac operator *(_Frac other) => _Frac(n * other.n, d * other.d)._reduce();
+
+  _Frac operator /(_Frac other) => _Frac(n * other.d, d * other.n)._reduce();
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! _Frac) return false;
+    final a = _reduce();
+    final b = other._reduce();
+    return a.n == b.n && a.d == b.d;
+  }
+
+  @override
+  int get hashCode {
+    final r = _reduce();
+    return Object.hash(r.n, r.d);
+  }
+
+  static int _gcd(int a, int b) {
+    while (b != 0) {
+      final t = a % b;
+      a = b;
+      b = t;
+    }
+    return a;
   }
 }

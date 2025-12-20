@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../../domain/logic/matador_engine.dart';
 
 /// Game state class
@@ -11,6 +12,8 @@ class GameState {
   final bool isPlaying;
   final String message;
   final bool isMatadorSolution;
+  final int currentStreak;
+  final bool isOnFire;
   final Set<int> usedNumberIndices; // Track which number buttons are used
   final List<String> solutions; // All valid solutions for this level
   final String? lastScoreBreakdown; // Points breakdown for feedback dialog
@@ -23,6 +26,8 @@ class GameState {
     required this.isPlaying,
     this.message = '',
     this.isMatadorSolution = false,
+    this.currentStreak = 0,
+    this.isOnFire = false,
     this.usedNumberIndices = const {},
     this.solutions = const [],
     this.lastScoreBreakdown,
@@ -37,6 +42,8 @@ class GameState {
     bool? isPlaying,
     String? message,
     bool? isMatadorSolution,
+    int? currentStreak,
+    bool? isOnFire,
     Set<int>? usedNumberIndices,
     List<String>? solutions,
     String? lastScoreBreakdown,
@@ -49,6 +56,8 @@ class GameState {
       isPlaying: isPlaying ?? this.isPlaying,
       message: message ?? this.message,
       isMatadorSolution: isMatadorSolution ?? this.isMatadorSolution,
+      currentStreak: currentStreak ?? this.currentStreak,
+      isOnFire: isOnFire ?? this.isOnFire,
       usedNumberIndices: usedNumberIndices ?? this.usedNumberIndices,
       solutions: solutions ?? this.solutions,
       lastScoreBreakdown: lastScoreBreakdown ?? this.lastScoreBreakdown,
@@ -59,10 +68,15 @@ class GameState {
 /// Game notifier class
 class GameNotifier extends Notifier<GameState> {
   late final MatadorEngine _engine;
+  bool _isDisposed = false;
 
   @override
   GameState build() {
     _engine = MatadorEngine();
+    _isDisposed = false;
+    ref.onDispose(() {
+      _isDisposed = true;
+    });
     return const GameState(
       target: 0,
       availableNumbers: [],
@@ -70,7 +84,25 @@ class GameNotifier extends Notifier<GameState> {
       score: 0,
       isPlaying: false,
       message: '',
+      currentStreak: 0,
+      isOnFire: false,
     );
+  }
+
+  void registerAnswerResult({required bool isCorrect}) {
+    final nextStreak = isCorrect ? (state.currentStreak + 1) : 0;
+    final onFire = nextStreak >= 3;
+
+    state = state.copyWith(
+      currentStreak: nextStreak,
+      isOnFire: onFire,
+    );
+
+    if (isCorrect) {
+      HapticFeedback.lightImpact();
+    } else {
+      HapticFeedback.heavyImpact();
+    }
   }
 
   /// Starts a new game using the advanced level generator.
@@ -90,6 +122,8 @@ class GameNotifier extends Notifier<GameState> {
       isPlaying: true,
       message: 'Make $target using these numbers!',
       isMatadorSolution: false,
+      currentStreak: state.currentStreak,
+      isOnFire: state.isOnFire,
       usedNumberIndices: {},
       solutions: const [],
     );
@@ -99,7 +133,7 @@ class GameNotifier extends Notifier<GameState> {
       'target': target,
     });
 
-    if (!ref.mounted) return;
+    if (_isDisposed) return;
     // Keep current expression/score in case the player already started.
     state = state.copyWith(solutions: solutions);
   }
@@ -192,6 +226,8 @@ class GameNotifier extends Notifier<GameState> {
     }
 
     if (result == state.target) {
+      registerAnswerResult(isCorrect: true);
+
       // Calculate points based on operators used
       final (points, breakdown) = _calculateScore(state.expression);
       
@@ -217,6 +253,7 @@ class GameNotifier extends Notifier<GameState> {
         startGame();
       });
     } else {
+      registerAnswerResult(isCorrect: false);
       state = state.copyWith(
         message: '❌ Wrong! Target: ${state.target}, Got: $result',
       );

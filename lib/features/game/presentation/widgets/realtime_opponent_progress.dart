@@ -89,12 +89,19 @@ class OpponentProgressWidget extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
-                LinearProgressIndicator(
-                  value: opponentData!.progress,
-                  backgroundColor: Colors.grey[900],
-                  valueColor: const AlwaysStoppedAnimation(Colors.orange),
-                  minHeight: 6,
-                  borderRadius: BorderRadius.circular(3),
+                TweenAnimationBuilder<double>(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                  tween: Tween<double>(end: opponentData!.progress.clamp(0.0, 1.0)),
+                  builder: (context, value, _) {
+                    return LinearProgressIndicator(
+                      value: value,
+                      backgroundColor: Colors.grey[900],
+                      valueColor: const AlwaysStoppedAnimation(Colors.orange),
+                      minHeight: 6,
+                      borderRadius: BorderRadius.circular(3),
+                    );
+                  },
                 ),
               ],
             ),

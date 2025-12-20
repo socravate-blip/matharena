@@ -15,6 +15,7 @@ import '../../domain/logic/progression_system.dart';
 import '../../domain/logic/bot_ai.dart'; // Pour BotDifficulty
 import '../../domain/repositories/rating_storage.dart';
 import '../../presentation/providers/adaptive_providers.dart';
+import '../providers/game_provider.dart';
 import '../widgets/realtime_opponent_progress.dart';
 import '../widgets/rank_up_animation.dart';
 import '../widgets/opponent_card.dart';
@@ -960,6 +961,7 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
   }
 
   Widget _buildMyProgressBar(double progress) {
+    final isOnFire = ref.watch(gameProvider.select((s) => s.isOnFire));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Row(
@@ -986,9 +988,26 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
                       '$_myScore',
                       style: GoogleFonts.spaceGrotesk(
                         fontSize: 20,
-                        color: Colors.cyan,
+                        color: isOnFire ? Colors.orange : Colors.cyan,
                         fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, animation) {
+                        return ScaleTransition(scale: animation, child: child);
+                      },
+                      child: isOnFire
+                          ? const Text(
+                              '🔥',
+                              key: ValueKey('on_fire'),
+                            )
+                          : const SizedBox(
+                              key: ValueKey('not_on_fire'),
+                            ),
                     ),
                   ],
                 ),
@@ -1207,6 +1226,9 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
     final userAnswerInt = int.tryParse(_userAnswer);
     final isCorrect =
         userAnswerInt != null && currentPuzzle.validateAnswer(userAnswerInt);
+
+    // Update streak/on-fire state (also triggers haptics on supported platforms).
+    ref.read(gameProvider.notifier).registerAnswerResult(isCorrect: isCorrect);
 
     // Tracker le solve
     final responseTime =
