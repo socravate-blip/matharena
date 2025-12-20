@@ -28,6 +28,9 @@ class PlayerStats {
   final int longestMatch; // en secondes
   final int shortestMatch; // en secondes
 
+  // Placement/Calibration
+  final bool isPlacementComplete; // Si le joueur a terminé la calibration initiale
+
   const PlayerStats({
     this.totalGames = 0,
     this.wins = 0,
@@ -48,6 +51,7 @@ class PlayerStats {
     this.slowestSolve = 0,
     this.longestMatch = 0,
     this.shortestMatch = 0,
+    this.isPlacementComplete = false,
   });
 
   /// Calcul du win rate (%)
@@ -97,6 +101,7 @@ class PlayerStats {
     int? fastestSolve,
     int? slowestSolve,
     int? longestMatch,
+    bool? isPlacementComplete,
     int? shortestMatch,
   }) {
     return PlayerStats(
@@ -119,12 +124,33 @@ class PlayerStats {
       fastestSolve: fastestSolve ?? this.fastestSolve,
       slowestSolve: slowestSolve ?? this.slowestSolve,
       longestMatch: longestMatch ?? this.longestMatch,
+      isPlacementComplete: isPlacementComplete ?? this.isPlacementComplete,
       shortestMatch: shortestMatch ?? this.shortestMatch,
     );
   }
 
   /// Conversion depuis Firestore
   factory PlayerStats.fromMap(Map<String, dynamic> map) {
+    // Firestore map keys are strings; we store timestamps as strings.
+    final rawEloHistory = map['eloHistory'];
+    final parsedEloHistory = <int, int>{};
+
+    if (rawEloHistory is Map) {
+      for (final entry in rawEloHistory.entries) {
+        final key = entry.key;
+        final value = entry.value;
+
+        final timestamp = key is int ? key : int.tryParse(key.toString());
+        if (timestamp == null) continue;
+
+        if (value is num) {
+          parsedEloHistory[timestamp] = value.toInt();
+        } else if (value is int) {
+          parsedEloHistory[timestamp] = value;
+        }
+      }
+    }
+
     return PlayerStats(
       totalGames: map['totalGames'] ?? 0,
       wins: map['wins'] ?? 0,
@@ -134,7 +160,7 @@ class PlayerStats {
       currentLoseStreak: map['currentLoseStreak'] ?? 0,
       bestWinStreak: map['bestWinStreak'] ?? 0,
       bestLoseStreak: map['bestLoseStreak'] ?? 0,
-      eloHistory: Map<int, int>.from(map['eloHistory'] ?? {}),
+      eloHistory: parsedEloHistory,
       basicStats: PuzzleTypeStats.fromMap(map['basicStats'] ?? {}),
       complexStats: PuzzleTypeStats.fromMap(map['complexStats'] ?? {}),
       game24Stats: PuzzleTypeStats.fromMap(map['game24Stats'] ?? {}),
@@ -149,6 +175,7 @@ class PlayerStats {
       slowestSolve: map['slowestSolve'] ?? 0,
       longestMatch: map['longestMatch'] ?? 0,
       shortestMatch: map['shortestMatch'] ?? 0,
+      isPlacementComplete: map['isPlacementComplete'] ?? false,
     );
   }
 
@@ -163,7 +190,8 @@ class PlayerStats {
       'currentLoseStreak': currentLoseStreak,
       'bestWinStreak': bestWinStreak,
       'bestLoseStreak': bestLoseStreak,
-      'eloHistory': eloHistory,
+      // Firestore requires string keys for maps.
+      'eloHistory': eloHistory.map((k, v) => MapEntry(k.toString(), v)),
       'basicStats': basicStats.toMap(),
       'complexStats': complexStats.toMap(),
       'game24Stats': game24Stats.toMap(),
@@ -173,6 +201,7 @@ class PlayerStats {
       'fastestSolve': fastestSolve,
       'slowestSolve': slowestSolve,
       'longestMatch': longestMatch,
+      'isPlacementComplete': isPlacementComplete,
       'shortestMatch': shortestMatch,
     };
   }

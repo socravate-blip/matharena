@@ -3,6 +3,7 @@ import 'dart:math';
 import '../logic/bot_ai.dart';
 import '../logic/bot_persona_generator.dart';
 import '../logic/adaptive_matchmaking.dart';
+import '../logic/smart_matchmaking_logic.dart';
 import '../logic/puzzle_generator.dart';
 import '../models/player_stats.dart';
 import '../models/puzzle.dart';
@@ -11,10 +12,19 @@ import '../models/match_model.dart';
 /// Service qui orchestre le "Ghost Protocol" - Le bot simule un vrai match Firebase
 /// L'UI ne fait AUCUNE différence entre un vrai joueur et un bot
 class GhostMatchOrchestrator {
-  final AdaptiveMatchmaking _matchmaking;
-  final PuzzleGenerator _puzzleGenerator;
+  final AdaptiveMatchmaking? _adaptiveMatchmaking;
+  final SmartMatchmakingLogic? _smartMatchmaking;
 
-  GhostMatchOrchestrator(this._matchmaking, this._puzzleGenerator);
+  GhostMatchOrchestrator(
+    dynamic matchmaking,
+  )   : _adaptiveMatchmaking = matchmaking is AdaptiveMatchmaking ? matchmaking : null,
+        _smartMatchmaking = matchmaking is SmartMatchmakingLogic ? matchmaking : null {
+    if (_adaptiveMatchmaking == null && _smartMatchmaking == null) {
+      throw ArgumentError(
+        'matchmaking must be either AdaptiveMatchmaking or SmartMatchmakingLogic'
+      );
+    }
+  }
 
   /// Crée un faux match "Firebase-like" avec un bot
   /// Retourne toutes les données nécessaires pour que l'UI pense que c'est un vrai match
@@ -26,11 +36,25 @@ class GhostMatchOrchestrator {
   }) async {
     // 1. Sélectionner la difficulté du bot (forcée OU adaptative)
     // IMPORTANT: Si forcedDifficulty est fournie, elle est PRIORITAIRE
-    final difficulty = forcedDifficulty ??
-        _matchmaking.selectBotDifficulty(
+    BotDifficulty difficulty;
+    
+    if (forcedDifficulty != null) {
+      difficulty = forcedDifficulty;
+      print('🎮 Using FORCED difficulty: ${difficulty.name}');
+    } else {
+      // Utiliser SmartMatchmaking si disponible, sinon AdaptiveMatchmaking
+      if (_smartMatchmaking != null) {
+        difficulty = _smartMatchmaking!.selectBotDifficulty(
           stats: playerStats ?? const PlayerStats(),
           isFirstRankedMatch: (playerStats?.totalGames ?? 0) == 0,
         );
+      } else {
+        difficulty = _adaptiveMatchmaking!.selectBotDifficulty(
+          stats: playerStats ?? const PlayerStats(),
+          isFirstRankedMatch: (playerStats?.totalGames ?? 0) == 0,
+        );
+      }
+    }
 
     // 2. Créer le bot avec ce niveau
     // IMPORTANT: On force l'utilisation de la difficulté choisie ci-dessus

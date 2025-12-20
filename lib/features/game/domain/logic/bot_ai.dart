@@ -39,8 +39,9 @@ class BotAI {
     int playerElo, {
     BotDifficulty difficulty = BotDifficulty.competitive,
   }) {
-    final variation = Random().nextInt(200) - 100; // ±100 ELO
-    final botElo = (playerElo + variation).clamp(800, 2000);
+    // The matchmaking layer already computes the bot's target ELO.
+    // Keep it stable here to avoid double-randomizing skill.
+    final botElo = playerElo.clamp(800, 2000);
 
     final botNames = [
       'Alex',

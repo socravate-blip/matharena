@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'features/game/presentation/pages/game_home_page.dart';
+import 'features/game/presentation/pages/app_startup_page.dart';
 import 'config/theme/app_theme.dart';
 
 void main() async {
@@ -24,7 +24,7 @@ class MathArenaApp extends StatelessWidget {
     return MaterialApp(
       title: 'MathArena',
       theme: AppTheme.darkTheme,
-      home: const GameHomePage(),
+      home: const AppStartupPage(), // Vérifie si placement nécessaire
       debugShowCheckedModeBanner: false,
     );
   }

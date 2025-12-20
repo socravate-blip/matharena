@@ -1,3 +1,5 @@
+import '../logic/expression_validator.dart';
+
 /// Abstract base class for all game puzzles
 abstract class GamePuzzle {
   final String id;
@@ -17,10 +19,10 @@ abstract class GamePuzzle {
 
   /// Returns the puzzle type for UI rendering
   PuzzleType get type;
-  
+
   /// Convert to JSON for Firebase storage
   Map<String, dynamic> toJson();
-  
+
   /// Create from JSON
   static GamePuzzle fromJson(Map<String, dynamic> json) {
     final typeStr = json['type'] as String;
@@ -73,28 +75,28 @@ class BasicPuzzle extends GamePuzzle {
   PuzzleType get type => PuzzleType.basic;
 
   String get question => '$numberA $operator $numberB = ?';
-  
+
   @override
   Map<String, dynamic> toJson() => {
-    'type': 'basic',
-    'id': id,
-    'targetValue': targetValue,
-    'maxPoints': maxPoints,
-    'timeLimit': timeLimit,
-    'numberA': numberA,
-    'numberB': numberB,
-    'operator': operator,
-  };
-  
+        'type': 'basic',
+        'id': id,
+        'targetValue': targetValue,
+        'maxPoints': maxPoints,
+        'timeLimit': timeLimit,
+        'numberA': numberA,
+        'numberB': numberB,
+        'operator': operator,
+      };
+
   factory BasicPuzzle.fromJson(Map<String, dynamic> json) => BasicPuzzle(
-    id: json['id'] as String,
-    targetValue: json['targetValue'] as int,
-    maxPoints: json['maxPoints'] as int? ?? 1,
-    timeLimit: json['timeLimit'] as int? ?? 30,
-    numberA: json['numberA'] as int,
-    numberB: json['numberB'] as int,
-    operator: json['operator'] as String,
-  );
+        id: json['id'] as String,
+        targetValue: json['targetValue'] as int,
+        maxPoints: json['maxPoints'] as int? ?? 1,
+        timeLimit: json['timeLimit'] as int? ?? 30,
+        numberA: json['numberA'] as int,
+        numberB: json['numberB'] as int,
+        operator: json['operator'] as String,
+      );
 }
 
 /// Complex puzzle with nested operations: A op (B op C) = ?
@@ -138,36 +140,36 @@ class ComplexPuzzle extends GamePuzzle {
       return '$numberA $operator1 $numberB $operator2 $numberC = ?';
     }
   }
-  
+
   @override
   Map<String, dynamic> toJson() => {
-    'type': 'complex',
-    'id': id,
-    'targetValue': targetValue,
-    'maxPoints': maxPoints,
-    'timeLimit': timeLimit,
-    'numberA': numberA,
-    'numberB': numberB,
-    'numberC': numberC,
-    'operator1': operator1,
-    'operator2': operator2,
-    'useParentheses': useParentheses,
-    'allowNegatives': allowNegatives,
-  };
-  
+        'type': 'complex',
+        'id': id,
+        'targetValue': targetValue,
+        'maxPoints': maxPoints,
+        'timeLimit': timeLimit,
+        'numberA': numberA,
+        'numberB': numberB,
+        'numberC': numberC,
+        'operator1': operator1,
+        'operator2': operator2,
+        'useParentheses': useParentheses,
+        'allowNegatives': allowNegatives,
+      };
+
   factory ComplexPuzzle.fromJson(Map<String, dynamic> json) => ComplexPuzzle(
-    id: json['id'] as String,
-    targetValue: json['targetValue'] as int,
-    maxPoints: json['maxPoints'] as int? ?? 2,
-    timeLimit: json['timeLimit'] as int? ?? 45,
-    numberA: json['numberA'] as int,
-    numberB: json['numberB'] as int,
-    numberC: json['numberC'] as int,
-    operator1: json['operator1'] as String,
-    operator2: json['operator2'] as String,
-    useParentheses: json['useParentheses'] as bool? ?? true,
-    allowNegatives: json['allowNegatives'] as bool? ?? true,
-  );
+        id: json['id'] as String,
+        targetValue: json['targetValue'] as int,
+        maxPoints: json['maxPoints'] as int? ?? 2,
+        timeLimit: json['timeLimit'] as int? ?? 45,
+        numberA: json['numberA'] as int,
+        numberB: json['numberB'] as int,
+        numberC: json['numberC'] as int,
+        operator1: json['operator1'] as String,
+        operator2: json['operator2'] as String,
+        useParentheses: json['useParentheses'] as bool? ?? true,
+        allowNegatives: json['allowNegatives'] as bool? ?? true,
+      );
 }
 
 /// Game 24 puzzle: Make 24 using 4 numbers
@@ -187,12 +189,13 @@ class Game24Puzzle extends GamePuzzle {
 
   @override
   bool validateAnswer(dynamic answer) {
-    // Answer should be a valid expression string
     if (answer is! String) return false;
-
-    // Validate it evaluates to 24
-    // This will be implemented in the engine
-    return true; // Placeholder
+    return ExpressionValidator.validatesToTarget(
+      expression: answer,
+      availableNumbers: availableNumbers,
+      target: targetValue,
+      requireExactNumbers: true,
+    );
   }
 
   @override
@@ -200,28 +203,28 @@ class Game24Puzzle extends GamePuzzle {
 
   String get question =>
       'Make $targetValue with: ${availableNumbers.join(", ")}';
-      
+
   @override
   Map<String, dynamic> toJson() => {
-    'type': 'game24',
-    'id': id,
-    'targetValue': targetValue,
-    'maxPoints': maxPoints,
-    'timeLimit': timeLimit,
-    'availableNumbers': availableNumbers,
-    'validSolutions': validSolutions?.toList(),
-  };
-  
+        'type': 'game24',
+        'id': id,
+        'targetValue': targetValue,
+        'maxPoints': maxPoints,
+        'timeLimit': timeLimit,
+        'availableNumbers': availableNumbers,
+        'validSolutions': validSolutions?.toList(),
+      };
+
   factory Game24Puzzle.fromJson(Map<String, dynamic> json) => Game24Puzzle(
-    id: json['id'] as String,
-    targetValue: json['targetValue'] as int? ?? 24,
-    maxPoints: json['maxPoints'] as int? ?? 5,
-    timeLimit: json['timeLimit'] as int? ?? 120,
-    availableNumbers: (json['availableNumbers'] as List).cast<int>(),
-    validSolutions: json['validSolutions'] != null 
-      ? (json['validSolutions'] as List).cast<String>().toSet()
-      : null,
-  );
+        id: json['id'] as String,
+        targetValue: json['targetValue'] as int? ?? 24,
+        maxPoints: json['maxPoints'] as int? ?? 5,
+        timeLimit: json['timeLimit'] as int? ?? 120,
+        availableNumbers: (json['availableNumbers'] as List).cast<int>(),
+        validSolutions: json['validSolutions'] != null
+            ? (json['validSolutions'] as List).cast<String>().toSet()
+            : null,
+      );
 }
 
 /// Matador puzzle: Reach target with 5 numbers using all 4 operations
@@ -243,12 +246,14 @@ class MatadorPuzzle extends GamePuzzle {
 
   @override
   bool validateAnswer(dynamic answer) {
-    // Answer should be a valid expression string
     if (answer is! String) return false;
-
-    // Validate it reaches the target
-    // This will be implemented in the engine
-    return true; // Placeholder
+    // Par défaut: on valide juste le résultat; l'UI peut appliquer des règles plus strictes.
+    return ExpressionValidator.validatesToTarget(
+      expression: answer,
+      availableNumbers: availableNumbers,
+      target: targetValue,
+      requireExactNumbers: false,
+    );
   }
 
   @override
@@ -264,28 +269,28 @@ class MatadorPuzzle extends GamePuzzle {
         expression.contains('*') &&
         expression.contains('/');
   }
-  
+
   @override
   Map<String, dynamic> toJson() => {
-    'type': 'matador',
-    'id': id,
-    'targetValue': targetValue,
-    'maxPoints': maxPoints,
-    'timeLimit': timeLimit,
-    'availableNumbers': availableNumbers,
-    'validSolutions': validSolutions?.toList(),
-    'solutionCount': solutionCount,
-  };
-  
+        'type': 'matador',
+        'id': id,
+        'targetValue': targetValue,
+        'maxPoints': maxPoints,
+        'timeLimit': timeLimit,
+        'availableNumbers': availableNumbers,
+        'validSolutions': validSolutions?.toList(),
+        'solutionCount': solutionCount,
+      };
+
   factory MatadorPuzzle.fromJson(Map<String, dynamic> json) => MatadorPuzzle(
-    id: json['id'] as String,
-    targetValue: json['targetValue'] as int,
-    maxPoints: json['maxPoints'] as int? ?? 13,
-    timeLimit: json['timeLimit'] as int? ?? 360,
-    availableNumbers: (json['availableNumbers'] as List).cast<int>(),
-    validSolutions: json['validSolutions'] != null 
-      ? (json['validSolutions'] as List).cast<String>().toSet()
-      : null,
-    solutionCount: json['solutionCount'] as int? ?? 0,
-  );
+        id: json['id'] as String,
+        targetValue: json['targetValue'] as int,
+        maxPoints: json['maxPoints'] as int? ?? 13,
+        timeLimit: json['timeLimit'] as int? ?? 360,
+        availableNumbers: (json['availableNumbers'] as List).cast<int>(),
+        validSolutions: json['validSolutions'] != null
+            ? (json['validSolutions'] as List).cast<String>().toSet()
+            : null,
+        solutionCount: json['solutionCount'] as int? ?? 0,
+      );
 }

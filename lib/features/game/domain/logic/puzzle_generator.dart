@@ -5,6 +5,32 @@ import '../models/puzzle.dart';
 class PuzzleGenerator {
   static final Random _random = Random();
 
+  /// Génère une liste de puzzles d'un type précis.
+  /// Utilisé notamment pour la calibration (placement) où chaque match cible un type.
+  static List<GamePuzzle> generateByType({
+    required PuzzleType type,
+    int count = 10,
+  }) {
+    final puzzles = <GamePuzzle>[];
+    for (int i = 0; i < count; i++) {
+      switch (type) {
+        case PuzzleType.basic:
+          puzzles.add(_generateBasicPuzzle(i));
+          break;
+        case PuzzleType.complex:
+          puzzles.add(_generateComplexPuzzle(i));
+          break;
+        case PuzzleType.game24:
+          puzzles.add(_generateGame24Puzzle(i));
+          break;
+        case PuzzleType.matador:
+          puzzles.add(_generateMatadorPuzzle(i));
+          break;
+      }
+    }
+    return puzzles;
+  }
+
   /// Génère des puzzles adaptés à l'ELO du joueur
   /// - < 1600 (Diamant): Basic + Complex
   /// - 1600-1799 (Diamant): Basic + Complex + Game24
@@ -156,13 +182,15 @@ class PuzzleGenerator {
 
   /// Génère un puzzle Game24 (faire 24 avec 4 nombres)
   static Game24Puzzle _generateGame24Puzzle(int index) {
-    // Générer 4 nombres aléatoires entre 1 et 13
-    final numbers = <int>[
-      _random.nextInt(13) + 1,
-      _random.nextInt(13) + 1,
-      _random.nextInt(13) + 1,
-      _random.nextInt(13) + 1,
+    const curated = <List<int>>[
+      [3, 3, 8, 8],
+      [1, 3, 4, 6],
+      [2, 2, 6, 6],
+      [2, 3, 4, 12],
+      [3, 6, 8, 9],
     ];
+
+    final numbers = curated[_random.nextInt(curated.length)];
 
     return Game24Puzzle(
       id: 'game24_$index',

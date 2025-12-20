@@ -209,6 +209,34 @@ class StatsService {
       slowestSolve: newSlowest,
     );
   }
+
+  /// Marque le placement/calibration comme terminé et définit l'ELO initial
+  Future<void> markPlacementComplete(String uid, int initialElo) async {
+    try {
+      final stats = await getPlayerStats(uid);
+      final now = DateTime.now();
+      final timestamp = now.millisecondsSinceEpoch;
+
+      final updatedStats = stats.copyWith(
+        isPlacementComplete: true,
+        eloHistory: {
+          ...stats.eloHistory,
+          timestamp: initialElo,
+        },
+      );
+
+      await _firestore.collection('users').doc(uid).set({
+        // Champs utilisés par ProfilePage (source de vérité UI)
+        'elo': initialElo,
+        'stats': updatedStats.toMap(),
+      }, SetOptions(merge: true));
+
+      print('✅ Placement complete marked for user $uid with initial ELO $initialElo');
+    } catch (e) {
+      print('❌ Error marking placement complete: $e');
+      rethrow;
+    }
+  }
 }
 
 /// Données d'une résolution de puzzle

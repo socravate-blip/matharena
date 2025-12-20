@@ -34,8 +34,11 @@ class EloEvolutionChart extends StatelessWidget {
     final maxElo =
         sortedEntries.map((e) => e.value).reduce(math.max).toDouble();
     final eloRange = maxElo - minElo;
-    final yMin = (minElo - eloRange * 0.1).floorToDouble();
-    final yMax = (maxElo + eloRange * 0.1).ceilToDouble();
+    final padding = eloRange == 0 ? 50.0 : eloRange * 0.1;
+    final yMin = (minElo - padding).floorToDouble();
+    final yMax = (maxElo + padding).ceilToDouble();
+    final ySpan = (yMax - yMin).abs();
+    final yInterval = math.max(1.0, ySpan / 4);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -98,7 +101,7 @@ class EloEvolutionChart extends StatelessWidget {
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  horizontalInterval: (yMax - yMin) / 4,
+                  horizontalInterval: yInterval,
                   getDrawingHorizontalLine: (value) {
                     return FlLine(
                       color: Colors.grey[800]!,
@@ -144,7 +147,7 @@ class EloEvolutionChart extends StatelessWidget {
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 50,
-                      interval: (yMax - yMin) / 4,
+                      interval: yInterval,
                       getTitlesWidget: (value, meta) {
                         return Text(
                           value.toInt().toString(),

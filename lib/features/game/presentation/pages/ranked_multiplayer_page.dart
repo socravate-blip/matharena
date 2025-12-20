@@ -12,7 +12,6 @@ import '../../domain/services/stats_service.dart';
 import '../../domain/services/ghost_match_orchestrator.dart';
 import '../../domain/logic/elo_calculator.dart';
 import '../../domain/logic/progression_system.dart';
-import '../../domain/logic/puzzle_generator.dart';
 import '../../domain/logic/bot_ai.dart'; // Pour BotDifficulty
 import '../../domain/repositories/rating_storage.dart';
 import '../../presentation/providers/adaptive_providers.dart';
@@ -123,8 +122,7 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
 
     // Créer l'orchestrateur Ghost
     final matchmaking = ref.read(adaptiveMatchmakingProvider);
-    final puzzleGen = PuzzleGenerator();
-    final orchestrator = GhostMatchOrchestrator(matchmaking, puzzleGen);
+    final orchestrator = GhostMatchOrchestrator(matchmaking);
 
     // Créer le Ghost Match (Bot invisible)
     final ghostData = await orchestrator.createGhostMatch(
@@ -271,6 +269,13 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
     if (_countdownSeconds != null && _countdownSeconds! > 0) {
       // Afficher l'OpponentCard du bot pendant le countdown
       return _buildGhostCountdownScreen(opponentData);
+    }
+
+    // IMPORTANT: en Ghost Mode, le match peut être terminé par le bot.
+    // Si le status est 'finished', on doit afficher l'écran de résultats
+    // même si le joueur n'a pas fini tous les puzzles.
+    if (ghostMatch.status == 'finished') {
+      return _buildResultScreen(ghostMatch, opponentData);
     }
 
     if (_currentPuzzleIndex >= _puzzles.length) {
@@ -1312,6 +1317,20 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
     // Si le bot a terminé tous les puzzles, arrêter la boucle
     if (botPuzzleIndex >= _puzzles.length) {
       print('🤖 Bot a terminé tous les puzzles!');
+
+      // Si le bot est déjà fini, le match doit être terminé immédiatement
+      // (règle: si l'adversaire termine en premier → fin de partie)
+      if ((_ghostData!.match.status) != 'finished') {
+        setState(() {
+          _ghostData = GhostMatchData(
+            bot: _ghostData!.bot,
+            botPersona: _ghostData!.botPersona,
+            match: _ghostData!.match.copyWith(status: 'finished'),
+            puzzles: _ghostData!.puzzles,
+            playerHistoricalAvgMs: _ghostData!.playerHistoricalAvgMs,
+          );
+        });
+      }
       return;
     }
 
@@ -1320,7 +1339,6 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
     // Calculer la réponse du bot (délai + réponse)
     final botResponse = GhostMatchOrchestrator(
       ref.read(adaptiveMatchmakingProvider),
-      PuzzleGenerator(),
     ).simulateBotResponse(
       bot: orchestrator.bot,
       puzzle: currentBotPuzzle,
@@ -1372,18 +1390,16 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
         } else {
           // Le bot a terminé!
           print('🏁 Bot a fini tous les puzzles!');
-          // Si le joueur a aussi fini, marquer le match comme terminé
-          if (_currentPuzzleIndex >= _puzzles.length) {
-            setState(() {
-              _ghostData = GhostMatchData(
-                bot: _ghostData!.bot,
-                botPersona: _ghostData!.botPersona,
-                match: _ghostData!.match.copyWith(status: 'finished'),
-                puzzles: _ghostData!.puzzles,
-                playerHistoricalAvgMs: _ghostData!.playerHistoricalAvgMs,
-              );
-            });
-          }
+          // Fin de match immédiate si le bot termine (même si le joueur n'a pas fini)
+          setState(() {
+            _ghostData = GhostMatchData(
+              bot: _ghostData!.bot,
+              botPersona: _ghostData!.botPersona,
+              match: _ghostData!.match.copyWith(status: 'finished'),
+              puzzles: _ghostData!.puzzles,
+              playerHistoricalAvgMs: _ghostData!.playerHistoricalAvgMs,
+            );
+          });
         }
       },
     );
@@ -1625,20 +1641,5 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
         timer.cancel();
       }
     });
-  }
-
-  /// Interface de jeu contre le bot
-  /// Méthode utilitaire pour obtenir la question d'un puzzle
-  String _getPuzzleQuestion(GamePuzzle puzzle) {
-    if (puzzle is BasicPuzzle) {
-      return '${puzzle.numberA} ${puzzle.operator} ${puzzle.numberB} = ?';
-    } else if (puzzle is ComplexPuzzle) {
-      return puzzle.question;
-    } else if (puzzle is Game24Puzzle) {
-      return puzzle.question;
-    } else if (puzzle is MatadorPuzzle) {
-      return puzzle.question;
-    }
-    return 'Question';
   }
 }
