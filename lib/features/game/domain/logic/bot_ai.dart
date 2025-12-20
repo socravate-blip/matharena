@@ -5,13 +5,16 @@ import 'package:math_expressions/math_expressions.dart';
 
 /// Bot difficulty levels for adaptive AI
 enum BotDifficulty {
-  /// Weaker bot - designed to let player win (120-150% of player avg time)
+  /// Weaker bot - designed to let player win (140-180% of player avg time)
+  /// Plus LENT que le joueur - donne confiance au joueur
   underdog,
 
   /// Equal skill bot - creates tension (95-105% of player avg time)
+  /// Égal au joueur - crée de la tension
   competitive,
 
-  /// Stronger bot - challenging but realistic (70-85% of player avg time)
+  /// Stronger bot - challenging but realistic (50-65% of player avg time)
+  /// Plus RAPIDE que le joueur - défie le joueur
   boss,
 }
 
@@ -267,106 +270,38 @@ class BotAI {
     return sqrt(-2 * log(u1)) * cos(2 * pi * u2);
   }
 
-  /// Calculate probability of bot getting answer correct
+  /// Le bot ne peut JAMAIS échouer - cette méthode retourne toujours 1.0
+  /// La difficulté affecte uniquement le TEMPS, pas la précision
+  @Deprecated('Le bot est infaillible - toujours 100% de réussite')
   double getSuccessProbability(GamePuzzle puzzle) {
-    double baseProbability;
-
-    switch (puzzle.type) {
-      case PuzzleType.basic:
-        baseProbability = 0.95;
-        break;
-      case PuzzleType.complex:
-        baseProbability = 0.88;
-        break;
-      case PuzzleType.game24:
-        baseProbability = 0.65;
-        break;
-      case PuzzleType.matador:
-        baseProbability = 0.45;
-        break;
-    }
-
-    // Adjust for skill level (800 = 0.6x, 1400 = 1.0x, 2000 = 1.3x)
-    final skillMultiplier = 0.6 + ((skillLevel - 800) / 1200) * 0.7;
-
-    // Adjust for difficulty - Boss gets a significant boost
-    double difficultyBoost = 1.0;
-    switch (difficulty) {
-      case BotDifficulty.underdog:
-        difficultyBoost = 0.75; // Reduced success rate
-        break;
-      case BotDifficulty.competitive:
-        difficultyBoost = 1.0; // Normal
-        break;
-      case BotDifficulty.boss:
-        difficultyBoost = 1.35; // 35% boost to success rate
-        break;
-    }
-
-    return (baseProbability * skillMultiplier * difficultyBoost)
-        .clamp(0.15, 0.98);
+    return 1.0; // Bot TOUJOURS réussit
   }
 
-  /// Generate a solution for arithmetic puzzles
+  /// Le bot retourne TOUJOURS la bonne réponse - pas de calcul nécessaire
+  @Deprecated('Le bot retourne simplement puzzle.targetValue')
   int? solveArithmetic(GamePuzzle puzzle) {
-    final probability = getSuccessProbability(puzzle);
-
-    if (_random.nextDouble() > probability) {
-      // Bot fails - return wrong answer
-      if (puzzle is BasicPuzzle || puzzle is ComplexPuzzle) {
-        final offset = _random.nextInt(20) - 10;
-        return puzzle.targetValue + offset;
-      }
-      return null;
-    }
-
-    // Bot succeeds
+    // Le bot ne rate jamais - retourne toujours la bonne réponse
     return puzzle.targetValue;
   }
 
-  /// Generate a solution for Game24/Matador puzzles
+  /// Le bot retourne TOUJOURS une expression correcte
+  @Deprecated('Le bot trouve toujours une solution valide')
   String? solveExpression(GamePuzzle puzzle) {
-    final probability = getSuccessProbability(puzzle);
-
-    if (_random.nextDouble() > probability) {
-      return null; // Bot fails
-    }
-
+    // Le bot ne rate jamais - trouve toujours une solution
     if (puzzle is Game24Puzzle) {
-      // Try to find a valid solution
       final solutions =
           _findGame24Solutions(puzzle.availableNumbers, puzzle.targetValue);
       if (solutions.isNotEmpty) {
-        return solutions[_random.nextInt(solutions.length)];
+        return solutions.first;
       }
-      return null;
     }
 
     if (puzzle is MatadorPuzzle) {
-      // For Matador, find a solution (may not be the best)
       final solutions =
           _findMatadorSolutions(puzzle.availableNumbers, puzzle.targetValue);
-
-      if (solutions.isEmpty) return null;
-
-      // Higher skill bots try to find Mathador more often
-      final tryMathador = skillLevel > 1500 && _random.nextDouble() > 0.7;
-
-      if (tryMathador) {
-        final mathadorSolutions = solutions
-            .where((s) =>
-                s.contains('+') &&
-                s.contains('-') &&
-                s.contains('*') &&
-                s.contains('/'))
-            .toList();
-
-        if (mathadorSolutions.isNotEmpty) {
-          return mathadorSolutions[_random.nextInt(mathadorSolutions.length)];
-        }
+      if (solutions.isNotEmpty) {
+        return solutions.first;
       }
-
-      return solutions[_random.nextInt(solutions.length)];
     }
 
     return null;

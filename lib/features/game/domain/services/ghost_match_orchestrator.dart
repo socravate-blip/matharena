@@ -24,7 +24,8 @@ class GhostMatchOrchestrator {
     PlayerStats? playerStats,
     BotDifficulty? forcedDifficulty, // Debug: forcer une difficulté spécifique
   }) async {
-    // 1. Sélectionner la difficulté du bot (psychologie adaptative OU forcée)
+    // 1. Sélectionner la difficulté du bot (forcée OU adaptative)
+    // IMPORTANT: Si forcedDifficulty est fournie, elle est PRIORITAIRE
     final difficulty = forcedDifficulty ??
         _matchmaking.selectBotDifficulty(
           stats: playerStats ?? const PlayerStats(),
@@ -32,10 +33,11 @@ class GhostMatchOrchestrator {
         );
 
     // 2. Créer le bot avec ce niveau
-    final bot = _matchmaking.createBotOpponent(
+    // IMPORTANT: On force l'utilisation de la difficulté choisie ci-dessus
+    // en créant le bot directement au lieu de passer par createBotOpponent
+    final bot = _createBotWithDifficulty(
       playerElo: playerElo,
-      stats: playerStats ?? const PlayerStats(),
-      isFirstRankedMatch: (playerStats?.totalGames ?? 0) == 0,
+      difficulty: difficulty,
     );
 
     // 3. Générer le faux profil du bot (Ghost Protocol)
@@ -119,9 +121,44 @@ class GhostMatchOrchestrator {
     return 'ghost_${timestamp}_$random';
   }
 
+  /// Crée un bot avec une difficulté spécifique (utilisé pour forcer la difficulté)
+  /// Contourne l'algorithme adaptatif de AdaptiveMatchmaking
+  BotAI _createBotWithDifficulty({
+    required int playerElo,
+    required BotDifficulty difficulty,
+  }) {
+    // Ajuster l'ELO du bot selon la difficulté choisie
+    int botElo;
+    final random = Random();
+    
+    switch (difficulty) {
+      case BotDifficulty.underdog:
+        // Bot est 50-150 ELO en dessous du joueur
+        botElo = playerElo - (50 + random.nextInt(100));
+        break;
+      case BotDifficulty.competitive:
+        // Bot est dans ±75 ELO du joueur
+        botElo = playerElo + (random.nextInt(150) - 75);
+        break;
+      case BotDifficulty.boss:
+        // Bot est 50-150 ELO au-dessus du joueur
+        botElo = playerElo + (50 + random.nextInt(100));
+        break;
+    }
+
+    // S'assurer que l'ELO reste dans les limites valides
+    botElo = botElo.clamp(800, 2000);
+
+    // Créer le bot avec la difficulté spécifique
+    return BotAI.matchingSkill(botElo, difficulty: difficulty);
+  }
+
   /// Simule la réponse du bot après un délai adaptatif
   /// IMPORTANT: Ne fait PAS d'attente ici, retourne juste le temps et le résultat
   /// L'attente est gérée par le Timer dans ranked_multiplayer_page
+  /// 
+  /// LE BOT NE PEUT JAMAIS ÉCHOUER - isCorrect est TOUJOURS true
+  /// La difficulté affecte uniquement le TEMPS de réponse, pas la précision
   BotResponse simulateBotResponse({
     required BotAI bot,
     required GamePuzzle puzzle,
@@ -133,12 +170,10 @@ class GhostMatchOrchestrator {
       playerHistoricalAvgMs: playerHistoricalAvgMs,
     );
 
-    // 2. Déterminer si le bot réussit
-    final probability = bot.getSuccessProbability(puzzle);
-    final success = Random().nextDouble() < probability;
-
+    // 2. LE BOT RÉUSSIT TOUJOURS - pas de probabilité d'échec
+    // La difficulté influence uniquement la vitesse (delay), pas la précision
     return BotResponse(
-      isCorrect: success,
+      isCorrect: true, // TOUJOURS true - le bot ne rate jamais
       responseTimeMs: delay.inMilliseconds,
     );
   }
