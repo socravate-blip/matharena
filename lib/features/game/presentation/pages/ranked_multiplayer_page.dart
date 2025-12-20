@@ -47,6 +47,7 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
   bool _isGhostMode = false;
   GhostMatchData? _ghostData;
   Timer? _ghostResponseTimer;
+  Timer? _botRaceTimer; // Timer pour la race condition bot vs joueur
 
   // Debug: Choisir difficulté du bot
   static const bool _debugBotDifficulty = true; // Activer pour débug
@@ -203,6 +204,7 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
     _countdownTimer?.cancel();
     _matchmakingTimeoutTimer?.cancel();
     _ghostResponseTimer?.cancel();
+    _botRaceTimer?.cancel();
     super.dispose();
   }
 
@@ -637,6 +639,13 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
 
     final currentPuzzle = _puzzles[_currentPuzzleIndex];
     final myProgress = (_currentPuzzleIndex) / _puzzles.length;
+
+    // 🏁 RACE CONDITION: Démarrer le timer du bot dès l'affichage du puzzle en Ghost Mode
+    if (_isGhostMode && _botRaceTimer == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _startBotRaceTimer();
+      });
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
@@ -1196,6 +1205,12 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
   Future<void> _submitAnswer() async {
     if (_userAnswer.isEmpty || _puzzles.isEmpty) return;
 
+    // 🏁 RACE CONDITION: Le joueur répond en premier -> ANNULER le timer du bot!
+    if (_isGhostMode && _botRaceTimer != null && _botRaceTimer!.isActive) {
+      print('🎯 JOUEUR GAGNE LA RACE! Timer bot annulé');
+      _botRaceTimer?.cancel();
+    }
+
     final currentPuzzle = _puzzles[_currentPuzzleIndex];
     final userAnswerInt = int.tryParse(_userAnswer);
     final isCorrect =
@@ -1242,9 +1257,11 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
           playerHistoricalAvgMs: _ghostData!.playerHistoricalAvgMs,
         );
 
-        // Déclencher la réponse du bot
+        // 🏁 DÉMARRER LA RACE pour le prochain puzzle
         if (_currentPuzzleIndex < _puzzles.length) {
-          _handleGhostBotResponse(currentPuzzle, responseTime);
+          Future.delayed(const Duration(milliseconds: 100), () {
+            _startBotRaceTimer();
+          });
         }
 
         // Vérifie si terminé
@@ -1277,6 +1294,92 @@ class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
       // Mauvaise réponse: shake ou feedback
       setState(() => _userAnswer = '');
     }
+  }
+
+  /// RACE CONDITION: Démarre le timer du bot dès l'affichage du puzzle
+  /// Le bot et le joueur jouent EN PARALLÈLE, le premier à répondre gagne
+  void _startBotRaceTimer() {
+    if (!_isGhostMode || _ghostData == null) return;
+    if (_currentPuzzleIndex >= _puzzles.length) return;
+
+    // Annuler tout timer précédent
+    _botRaceTimer?.cancel();
+
+    final orchestrator = _ghostData!;
+    final currentPuzzle = _puzzles[_currentPuzzleIndex];
+    final currentBotIndex =
+        (orchestrator.match.player2?.progress ?? 0.0) * _puzzles.length;
+
+    // Si le bot a déjà répondu à ce puzzle, ne rien faire
+    if (currentBotIndex.toInt() >= _currentPuzzleIndex) {
+      return;
+    }
+
+    // Calculer la réponse du bot (délai + réponse)
+    final botResponse = GhostMatchOrchestrator(
+      ref.read(adaptiveMatchmakingProvider),
+      PuzzleGenerator(),
+    ).simulateBotResponse(
+      bot: orchestrator.bot,
+      puzzle: currentPuzzle,
+      playerHistoricalAvgMs: orchestrator.playerHistoricalAvgMs,
+    );
+
+    print(
+        '🏁 RACE DÉMARRÉE! Bot va répondre dans ${botResponse.responseTimeMs}ms (${(botResponse.responseTimeMs / 1000).toStringAsFixed(1)}s)');
+
+    // RACE CONDITION: Timer démarre MAINTENANT, en parallèle du joueur
+    _botRaceTimer = Timer(
+      Duration(milliseconds: botResponse.responseTimeMs),
+      () {
+        // Si le timer se déclenche, le bot gagne la race!
+        if (!mounted || !_isGhostMode) return;
+
+        print(
+            '🤖 BOT GAGNE LA RACE! Réponse: ${botResponse.isCorrect ? "CORRECT" : "INCORRECT"}');
+
+        setState(() {
+          // Mettre à jour le score et le progrès du bot
+          final newBotIndex = currentBotIndex.toInt() + 1;
+          final botProgress = newBotIndex / _puzzles.length;
+          final botScore = (orchestrator.match.player2?.score ?? 0) +
+              (botResponse.isCorrect ? currentPuzzle.maxPoints : 0);
+
+          final updatedMatch = _ghostData!.match.copyWith(
+            player2: _ghostData!.match.player2!.copyWith(
+              progress: botProgress,
+              score: botScore,
+              status: newBotIndex >= _puzzles.length ? 'finished' : 'playing',
+            ),
+          );
+
+          // Si le bot a terminé, marquer le match comme fini
+          final finalMatch = (newBotIndex >= _puzzles.length)
+              ? updatedMatch.copyWith(status: 'finished')
+              : updatedMatch;
+
+          _ghostData = GhostMatchData(
+            bot: _ghostData!.bot,
+            botPersona: _ghostData!.botPersona,
+            match: finalMatch,
+            puzzles: _ghostData!.puzzles,
+            playerHistoricalAvgMs: _ghostData!.playerHistoricalAvgMs,
+          );
+
+          // Passer au puzzle suivant (le joueur a perdu cette manche)
+          _currentPuzzleIndex++;
+          _userAnswer = '';
+          _puzzleStartTime = DateTime.now().millisecondsSinceEpoch;
+
+          // Lancer la race pour le prochain puzzle si le match continue
+          if (_currentPuzzleIndex < _puzzles.length) {
+            Future.delayed(const Duration(milliseconds: 100), () {
+              _startBotRaceTimer();
+            });
+          }
+        });
+      },
+    );
   }
 
   /// Gère la réponse du bot en Ghost Mode
