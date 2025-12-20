@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,15 +9,19 @@ import '../../domain/models/puzzle.dart';
 import '../../domain/models/player_stats.dart';
 import '../../domain/services/firebase_multiplayer_service.dart';
 import '../../domain/services/stats_service.dart';
+import '../../domain/services/ghost_match_orchestrator.dart';
 import '../../domain/logic/elo_calculator.dart';
 import '../../domain/logic/progression_system.dart';
+import '../../domain/logic/puzzle_generator.dart';
+import '../../domain/logic/bot_ai.dart'; // Pour BotDifficulty
 import '../../domain/repositories/rating_storage.dart';
+import '../../presentation/providers/adaptive_providers.dart';
 import '../widgets/realtime_opponent_progress.dart';
 import '../widgets/rank_up_animation.dart';
 import '../widgets/opponent_card.dart';
 
-/// Page Ranked avec Waiting Room et synchronisation temps réel
-class RankedMultiplayerPage extends StatefulWidget {
+/// Page Ranked avec Waiting Room, synchronisation temps réel et fallback bot après 5s
+class RankedMultiplayerPage extends ConsumerStatefulWidget {
   final String matchId;
 
   const RankedMultiplayerPage({
@@ -25,10 +30,11 @@ class RankedMultiplayerPage extends StatefulWidget {
   });
 
   @override
-  State<RankedMultiplayerPage> createState() => _RankedMultiplayerPageState();
+  ConsumerState<RankedMultiplayerPage> createState() =>
+      _RankedMultiplayerPageState();
 }
 
-class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
+class _RankedMultiplayerPageState extends ConsumerState<RankedMultiplayerPage> {
   final FirebaseMultiplayerService _service = FirebaseMultiplayerService();
 
   String? _myUid;
@@ -37,9 +43,23 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
   int _myScore = 0;
   String _userAnswer = '';
 
+  // Ghost mode (fallback après timeout - Utilise l'interface normale)
+  bool _isGhostMode = false;
+  GhostMatchData? _ghostData;
+  Timer? _ghostResponseTimer;
+
+  // Debug: Choisir difficulté du bot
+  static const bool _debugBotDifficulty = true; // Activer pour débug
+  BotDifficulty?
+      _selectedBotDifficulty; // null = adaptative, sinon force difficulté
+
   // Countdown
   int? _countdownSeconds;
   Timer? _countdownTimer;
+
+  // Matchmaking timeout
+  Timer? _matchmakingTimeoutTimer;
+  int _waitingSeconds = 0;
 
   // ELO
   int? _oldElo;
@@ -59,6 +79,112 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
     _matchStartTime = DateTime.now().millisecondsSinceEpoch;
     _puzzleStartTime = DateTime.now().millisecondsSinceEpoch;
     _loadPlayerStats();
+    _startMatchmakingTimeout();
+  }
+
+  /// Démarre le timer de 5 secondes pour le timeout matchmaking
+  void _startMatchmakingTimeout() {
+    print('⏱️ Démarrage timer matchmaking: 5 secondes');
+
+    // Timer pour compter les secondes
+    Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted && !_isGhostMode) {
+        setState(() {
+          _waitingSeconds = timer.tick;
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+
+    // Timer de timeout principal
+    _matchmakingTimeoutTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && !_isGhostMode) {
+        _handleMatchmakingTimeout();
+      }
+    });
+  }
+
+  /// Gère le timeout : crée un Ghost Match (interface identique au multijoueur)
+  Future<void> _handleMatchmakingTimeout() async {
+    print('👻 Timeout matchmaking! Création d\'un Ghost Match...');
+
+    // Annuler le match Firebase en attente
+    try {
+      await _service.leaveMatch(widget.matchId, _myUid!);
+    } catch (e) {
+      print('Erreur lors de l\'annulation du match: $e');
+    }
+
+    // Récupérer le profil joueur
+    final profile = await RatingStorage().getProfile();
+    final playerStats = _playerStats ?? const PlayerStats();
+
+    // Créer l'orchestrateur Ghost
+    final matchmaking = ref.read(adaptiveMatchmakingProvider);
+    final puzzleGen = PuzzleGenerator();
+    final orchestrator = GhostMatchOrchestrator(matchmaking, puzzleGen);
+
+    // Créer le Ghost Match (Bot invisible)
+    final ghostData = await orchestrator.createGhostMatch(
+      playerElo: profile.currentRating,
+      playerId: _myUid!,
+      playerStats: playerStats,
+      forcedDifficulty: _selectedBotDifficulty, // Debug: difficulté forcée
+    );
+
+    print(
+        '✅ Ghost Match créé: ${ghostData.botPersona.displayName} (ELO ${ghostData.botPersona.currentRating})');
+
+    if (mounted) {
+      setState(() {
+        _isGhostMode = true;
+        _ghostData = ghostData;
+        _puzzles = ghostData.puzzles;
+        _countdownSeconds = 3;
+      });
+
+      _startCountdown();
+    }
+  }
+
+  /// Annule le timer de matchmaking si un adversaire réel est trouvé
+  void _cancelMatchmakingTimeout() {
+    _matchmakingTimeoutTimer?.cancel();
+    _matchmakingTimeoutTimer = null;
+    print('✅ Adversaire trouvé! Timer matchmaking annulé');
+  }
+
+  /// Widget pour bouton de difficulté (debug)
+  Widget _buildDifficultyButton(String label, BotDifficulty? difficulty) {
+    final isSelected = _selectedBotDifficulty == difficulty;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: ElevatedButton(
+          onPressed: () {
+            setState(() {
+              _selectedBotDifficulty = difficulty;
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isSelected ? Colors.orange : Colors.grey[800],
+            foregroundColor: isSelected ? Colors.black : Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadPlayerStats() async {
@@ -75,11 +201,19 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _matchmakingTimeoutTimer?.cancel();
+    _ghostResponseTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Mode Ghost : créer un Stream local depuis le GhostMatchData
+    if (_isGhostMode && _ghostData != null) {
+      return _buildGhostMatchUI();
+    }
+
+    // Mode multijoueur normal avec StreamBuilder Firebase
     return StreamBuilder<DocumentSnapshot>(
       stream: _service.streamMatch(widget.matchId),
       builder: (context, snapshot) {
@@ -102,12 +236,14 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
             return _buildWaitingScreen();
 
           case 'starting':
+            _cancelMatchmakingTimeout(); // Adversaire trouvé!
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _startCountdownIfNeeded();
             });
             return _buildCountdownScreen(opponent?.nickname);
 
           case 'playing':
+            _cancelMatchmakingTimeout(); // Adversaire trouvé!
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _loadPuzzlesIfNeeded(match);
             });
@@ -120,6 +256,113 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
             return _buildErrorScreen('Statut inconnu: $status');
         }
       },
+    );
+  }
+
+  /// Interface Ghost : utilise la MÊME interface que le multijoueur réel
+  /// Le joueur ne peut pas distinguer un bot d'un adversaire humain
+  Widget _buildGhostMatchUI() {
+    final ghostMatch = _ghostData!.match;
+    final opponentData = ghostMatch.player2;
+
+    // Machine à états selon le status (identique au multiplayer)
+    if (_countdownSeconds != null && _countdownSeconds! > 0) {
+      // Afficher l'OpponentCard du bot pendant le countdown
+      return _buildGhostCountdownScreen(opponentData);
+    }
+
+    if (_currentPuzzleIndex >= _puzzles.length) {
+      return _buildResultScreen(ghostMatch, opponentData);
+    }
+
+    return _buildGameScreen(ghostMatch, opponentData);
+  }
+
+  /// Écran de countdown pour Ghost Match (affiche OpponentCard du bot)
+  Widget _buildGhostCountdownScreen(PlayerData? opponentData) {
+    final botPersona = _ghostData!.botPersona;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'ADVERSAIRE TROUVÉ !',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.cyan,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 32),
+            // OpponentCard avec données du bot
+            if (opponentData != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: OpponentCard(
+                  nickname: opponentData.nickname,
+                  elo: opponentData.elo,
+                  winStreak: 0,
+                  loseStreak: 0,
+                  totalGames: botPersona.gamesPlayed,
+                  isFound: true,
+                ),
+              ),
+            const SizedBox(height: 64),
+            Text(
+              _countdownSeconds != null ? '$_countdownSeconds' : '3',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 120,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'LA PARTIE COMMENCE...',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.grey[600],
+                letterSpacing: 1,
+              ),
+            ),
+            // Debug indicator
+            if (_debugBotDifficulty)
+              Padding(
+                padding: const EdgeInsets.only(top: 24),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.bug_report,
+                          color: Colors.orange, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        'BOT: ${_ghostData!.bot.difficulty.toString().split('.').last.toUpperCase()}',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -189,9 +432,114 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
                 color: Colors.grey[600],
               ),
             ),
+            const SizedBox(height: 16),
+            // Affichage du temps d'attente avec indication du bot
+            Text(
+              _waitingSeconds < 5
+                  ? 'Temps d\'attente: ${_waitingSeconds}s / 5s'
+                  : 'Création d\'un match contre bot...',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: _waitingSeconds < 5 ? Colors.cyan : Colors.orange,
+              ),
+            ),
+            if (_waitingSeconds < 5)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+                child: LinearProgressIndicator(
+                  value: _waitingSeconds / 5,
+                  backgroundColor: Colors.grey[800],
+                  color: Colors.cyan,
+                ),
+              ),
+            if (_waitingSeconds < 5)
+              Text(
+                'Un bot sera assigné après 5 secondes',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            // Debug: Sélecteur de difficulté (affiché pendant toute l'attente)
+            if (_debugBotDifficulty) ...<Widget>[
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.symmetric(horizontal: 32),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  border: Border.all(
+                    color: Colors.orange,
+                    width: _waitingSeconds >= 5 ? 2 : 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.bug_report,
+                            color: Colors.orange, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          _waitingSeconds >= 5
+                              ? 'DEBUG: Difficulté Sélectionnée'
+                              : 'DEBUG: Choisir Difficulté Bot',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildDifficultyButton('Auto', null),
+                        _buildDifficultyButton(
+                            'Underdog', BotDifficulty.underdog),
+                        _buildDifficultyButton(
+                            'Competitive', BotDifficulty.competitive),
+                        _buildDifficultyButton('Boss', BotDifficulty.boss),
+                      ],
+                    ),
+                    if (_selectedBotDifficulty != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '✓ ${_selectedBotDifficulty == BotDifficulty.underdog ? 'Underdog' : _selectedBotDifficulty == BotDifficulty.competitive ? 'Competitive' : 'Boss'} sélectionné',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    if (_selectedBotDifficulty == null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '✓ Mode adaptatif activé',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.cyan,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 48),
             TextButton.icon(
               onPressed: () async {
+                _matchmakingTimeoutTimer?.cancel();
                 await _service.leaveMatch(widget.matchId, _myUid!);
                 if (mounted) Navigator.pop(context);
               },
@@ -873,23 +1221,132 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
             DateTime.now().millisecondsSinceEpoch; // Reset pour prochain puzzle
       });
 
-      // Mise à jour Firebase
-      final progress = _currentPuzzleIndex / _puzzles.length;
-      await _service.updateProgress(
-        matchId: widget.matchId,
-        uid: _myUid!,
-        percentage: progress,
-        score: _myScore,
-      );
+      // Mise à jour selon le mode
+      if (_isGhostMode && _ghostData != null) {
+        // Ghost Mode: mettre à jour le MatchModel local
+        final progress = _currentPuzzleIndex / _puzzles.length;
+        final updatedMatch = _ghostData!.match.copyWith(
+          player1: _ghostData!.match.player1.copyWith(
+            progress: progress,
+            score: _myScore,
+            status:
+                _currentPuzzleIndex >= _puzzles.length ? 'finished' : 'playing',
+          ),
+        );
 
-      // Vérifie si terminé
-      if (_currentPuzzleIndex >= _puzzles.length) {
-        await _service.finishPlayer(matchId: widget.matchId, uid: _myUid!);
+        _ghostData = GhostMatchData(
+          bot: _ghostData!.bot,
+          botPersona: _ghostData!.botPersona,
+          match: updatedMatch,
+          puzzles: _ghostData!.puzzles,
+          playerHistoricalAvgMs: _ghostData!.playerHistoricalAvgMs,
+        );
+
+        // Déclencher la réponse du bot
+        if (_currentPuzzleIndex < _puzzles.length) {
+          _handleGhostBotResponse(currentPuzzle, responseTime);
+        }
+
+        // Vérifie si terminé
+        if (_currentPuzzleIndex >= _puzzles.length) {
+          final finishedMatch = _ghostData!.match.copyWith(status: 'finished');
+          _ghostData = GhostMatchData(
+            bot: _ghostData!.bot,
+            botPersona: _ghostData!.botPersona,
+            match: finishedMatch,
+            puzzles: _ghostData!.puzzles,
+            playerHistoricalAvgMs: _ghostData!.playerHistoricalAvgMs,
+          );
+        }
+      } else {
+        // Firebase Mode: mise à jour normale
+        final progress = _currentPuzzleIndex / _puzzles.length;
+        await _service.updateProgress(
+          matchId: widget.matchId,
+          uid: _myUid!,
+          percentage: progress,
+          score: _myScore,
+        );
+
+        // Vérifie si terminé
+        if (_currentPuzzleIndex >= _puzzles.length) {
+          await _service.finishPlayer(matchId: widget.matchId, uid: _myUid!);
+        }
       }
     } else {
       // Mauvaise réponse: shake ou feedback
       setState(() => _userAnswer = '');
     }
+  }
+
+  /// Gère la réponse du bot en Ghost Mode
+  /// Utilise l'orchestrateur pour simuler une réponse naturelle avec délai adaptatif
+  void _handleGhostBotResponse(GamePuzzle puzzle, int playerResponseTime) {
+    final orchestrator = _ghostData!;
+    final currentBotIndex =
+        (orchestrator.match.player2?.progress ?? 0.0) * _puzzles.length;
+
+    // Si le bot a déjà répondu à ce puzzle, ne rien faire
+    if (currentBotIndex.toInt() >= _currentPuzzleIndex) {
+      return;
+    }
+
+    // Annuler tout timer précédent
+    _ghostResponseTimer?.cancel();
+
+    // Calculer la réponse du bot (sans attendre)
+    final botResponse = GhostMatchOrchestrator(
+      ref.read(adaptiveMatchmakingProvider),
+      PuzzleGenerator(),
+    ).simulateBotResponse(
+      bot: orchestrator.bot,
+      puzzle: puzzle,
+      playerHistoricalAvgMs: orchestrator.playerHistoricalAvgMs,
+    );
+
+    print(
+        '🤖 Bot va répondre dans ${botResponse.responseTimeMs}ms (${(botResponse.responseTimeMs / 1000).toStringAsFixed(1)}s)');
+
+    // Créer un Timer qui se déclenchera après le délai calculé
+    _ghostResponseTimer = Timer(
+      Duration(milliseconds: botResponse.responseTimeMs),
+      () {
+        if (!mounted || !_isGhostMode) return;
+
+        print(
+            '✅ Bot répond: ${botResponse.isCorrect ? "CORRECT" : "INCORRECT"}');
+
+        setState(() {
+          // Mettre à jour le score et le progrès du bot
+          final newBotIndex = currentBotIndex.toInt() + 1;
+          final botProgress = newBotIndex / _puzzles.length;
+          final botScore = (orchestrator.match.player2?.score ?? 0) +
+              (botResponse.isCorrect ? puzzle.maxPoints : 0);
+
+          final updatedMatch = _ghostData!.match.copyWith(
+            player2: _ghostData!.match.player2!.copyWith(
+              progress: botProgress,
+              score: botScore,
+              status: newBotIndex >= _puzzles.length ? 'finished' : 'playing',
+            ),
+          );
+
+          // Si le bot a terminé, marquer le match comme fini
+          final finalMatch = (newBotIndex >= _puzzles.length &&
+                  _currentPuzzleIndex >= _puzzles.length)
+              ? updatedMatch.copyWith(status: 'finished')
+              : updatedMatch;
+
+          _ghostData = GhostMatchData(
+            bot: _ghostData!.bot,
+            botPersona: _ghostData!.botPersona,
+            match: finalMatch,
+            puzzles: _ghostData!.puzzles,
+            playerHistoricalAvgMs: _ghostData!.playerHistoricalAvgMs,
+          );
+        });
+      },
+    );
   }
 
   void _calculateEloChange(bool iWon, bool isDraw, PlayerData? opponent) async {
@@ -1102,5 +1559,43 @@ class _RankedMultiplayerPageState extends State<RankedMultiplayerPage> {
         ],
       ),
     );
+  }
+
+  // ============================================================
+  // MODE BOT (Fallback après timeout de matchmaking)
+  // ============================================================
+
+  /// Démarre le countdown pour le mode bot
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _countdownSeconds = (_countdownSeconds ?? 0) - 1;
+          if (_countdownSeconds! <= 0) {
+            timer.cancel();
+            _countdownSeconds = null;
+            // Le jeu commence
+          }
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  /// Interface de jeu contre le bot
+  /// Méthode utilitaire pour obtenir la question d'un puzzle
+  String _getPuzzleQuestion(GamePuzzle puzzle) {
+    if (puzzle is BasicPuzzle) {
+      return '${puzzle.numberA} ${puzzle.operator} ${puzzle.numberB} = ?';
+    } else if (puzzle is ComplexPuzzle) {
+      return puzzle.question;
+    } else if (puzzle is Game24Puzzle) {
+      return puzzle.question;
+    } else if (puzzle is MatadorPuzzle) {
+      return puzzle.question;
+    }
+    return 'Question';
   }
 }
